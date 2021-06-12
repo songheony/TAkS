@@ -20,6 +20,7 @@ import models.squeezenet as squeezenet
 import models.vgg as vgg
 import models.xception as xception
 from models.jocor_model import MLPNet, CNN
+from models.preact_resnet import PreActResNet18
 
 
 def get_model(model_name, dataset_name):
@@ -48,7 +49,9 @@ def get_model(model_name, dataset_name):
             net = CNN(n_outputs=10)
         elif dataset_name == "cifar100":
             net = CNN(n_outputs=100)
-        elif dataset_name == "tiny-imagenet" or "clothing1m":
+        elif dataset_name == "tiny-imagenet":
+            net = PreActResNet18(num_classes)
+        elif dataset_name == "clothing1m":
             model = getattr(resnet, "resnet18")
             net = model(grayscale, num_classes)
             net = torch.nn.DataParallel(net, device_ids=[0, 1, 2, 3])

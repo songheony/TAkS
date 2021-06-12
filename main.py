@@ -95,6 +95,8 @@ def train(
             losses, ind_updates = loss_jocor(
                 outputs, target, kwargs["rate_schedule"][epoch], kwargs["co_lambda"]
             )
+        else:
+            losses, ind_updates = loss_general(outputs, target, criterion)
 
         if None in losses or any(~torch.isfinite(torch.tensor(losses))):
             continue
@@ -550,7 +552,7 @@ if __name__ == "__main__":
             args.dataset_name, train_dataset, batch_size, epochs, args.k_ratio, 0
         )
 
-        player = config_precision(train_dataset, train_noise_ind, k_ratio, precision)
+        player = config_precision(train_dataset, train_noise_ind, args.k_ratio, args.precision)
 
         models = [model]
         optimizers = [optimizer]

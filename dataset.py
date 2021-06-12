@@ -84,13 +84,11 @@ class TinyImageNet(Dataset):
 
         # build class label - number mapping
         self.classes = []
-        self.cls2txt = {}
         self.cls2idx = {}
-        with open(os.path.join(self.root, "words.txt"), "r") as fp:
+        with open(os.path.join(self.root, "wnids.txt"), "r") as fp:
             for i, text in enumerate(fp.readlines()):
-                num, txt = text.strip("\n").split("\t")
+                num = text.strip("\n")
                 self.classes.append(num)
-                self.cls2txt[num] = txt
                 self.cls2idx[num] = i
 
         if self.mode == "train":
