@@ -288,7 +288,7 @@ def run(
     return metrics, selected_idxs, best_epochs
 
 
-def config_ours(dataset_name, train_dataset, batch_size, epochs, k_ratio, lr_ratio, use_total=True):
+def config_ours(train_dataset, batch_size, epochs, k_ratio, lr_ratio, use_total=True):
     fixed_train_dataloader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=False, num_workers=8
     )
@@ -354,13 +354,13 @@ def config_co_teaching(dataset_name, forget_rate, epochs):
 
 
 def config_co_teaching_plus(dataset_name):
-    if args.dataset_name == "mnist":
+    if dataset_name == "mnist":
         init_epoch = 0
-    elif args.dataset_name == "cifar10":
+    elif dataset_name == "cifar10":
         init_epoch = 20
-    elif args.dataset_name == "cifar100":
+    elif dataset_name == "cifar100":
         init_epoch = 5
-    elif args.dataset_name == "tiny-imagenet":
+    elif dataset_name == "tiny-imagenet":
         init_epoch = 100
     else:
         init_epoch = 5
@@ -486,7 +486,6 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
         player, fixed_train_dataloader = config_ours(
-            args.dataset_name,
             train_dataset,
             batch_size,
             epochs,
@@ -506,7 +505,6 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
         player, fixed_train_dataloader = config_ours(
-            args.dataset_name,
             train_dataset,
             batch_size,
             epochs,
@@ -526,7 +524,6 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
         player, fixed_train_dataloader = config_ours(
-            args.dataset_name,
             train_dataset,
             batch_size,
             epochs,
@@ -549,7 +546,7 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
         _, fixed_train_dataloader = config_ours(
-            args.dataset_name, train_dataset, batch_size, epochs, args.k_ratio, 0
+            train_dataset, batch_size, epochs, args.k_ratio, 0
         )
 
         player = config_precision(train_dataset, train_noise_ind, args.k_ratio, args.precision)
