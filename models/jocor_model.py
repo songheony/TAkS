@@ -25,9 +25,7 @@ class CNN(nn.Module):
         self.bn5 = nn.BatchNorm2d(196, momentum=self.momentum)
         self.bn6 = nn.BatchNorm2d(16, momentum=self.momentum)
 
-    def forward(
-        self, x,
-    ):
+    def forward(self, x):
         h = x
         h = self.c1(h)
         h = F.relu(call_bn(self.bn1, h))

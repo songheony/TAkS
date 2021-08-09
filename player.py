@@ -22,22 +22,17 @@ class PrecisionSelector:
 
     def init(self):
         self.w = np.zeros(self.n_experts)
-        self.total_loss = np.zeros(self.n_experts)
+        self.total_loss = torch.zeros(self.n_experts)
 
         self.select()
 
-    def update(self, outputs, preds, targets):
-        correct = torch.ones_like(preds)
-        correct[preds != targets] = -1
-        probality = torch.max(outputs, dim=1)[0]
-        loss = ((1 - correct * probality) / 2).cpu().numpy()
-
+    def update(self, loss):
         self.total_loss += loss
 
         if not self.fixed:
             self.select()
 
-        return loss, self.total_loss, self.total_loss
+        return self.total_loss, self.total_loss
 
 
 class Player:
@@ -52,15 +47,11 @@ class Player:
 
     def init(self):
         self.lr = np.sqrt(self.k * self.T) * self.lr_ratio
-        self.w = np.zeros(self.n_experts)
-        self.w[np.random.choice(self.n_experts, self.k, replace=False)] = 1
-        self.total_loss = np.zeros(self.n_experts)
+        self.w = np.zeros(self.n_experts, dtype=bool)
+        self.w[np.random.choice(self.n_experts, self.k, replace=False)] = True
+        self.total_loss = torch.zeros(self.n_experts)
 
-    def update(self, outputs, preds, targets):
-        correct = torch.ones_like(preds)
-        correct[preds != targets] = -1
-        probality = torch.max(outputs, dim=1)[0]
-        loss = ((1 - correct * probality) / 2).cpu().numpy()
+    def update(self, loss):
         if self.use_total:
             self.total_loss += loss
 
@@ -72,12 +63,12 @@ class Player:
         else:
             objective = loss
 
-        idx = np.argpartition(objective, self.k)[: self.k]
+        _, idx = torch.topk(objective, self.k)
 
-        self.w[:] = 0
-        self.w[idx] = 1
+        self.w[:] = False
+        self.w[idx] = True
 
-        return loss, self.total_loss, objective
+        return self.total_loss, objective
 
 
 if __name__ == "__main__":

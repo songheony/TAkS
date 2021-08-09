@@ -153,7 +153,10 @@ class ResnetInResnet(nn.Module):
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(900, 450), nn.ReLU(), nn.Dropout(), nn.Linear(450, 100),
+            nn.Linear(900, 450),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.Linear(450, 100),
         )
 
         self._weight_init()

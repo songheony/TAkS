@@ -64,7 +64,8 @@ class EntryFlow(nn.Module):
         )
 
         self.conv3_shortcut = nn.Sequential(
-            nn.Conv2d(64, 128, 1, stride=2), nn.BatchNorm2d(128),
+            nn.Conv2d(64, 128, 1, stride=2),
+            nn.BatchNorm2d(128),
         )
 
         self.conv4_residual = nn.Sequential(
@@ -78,7 +79,8 @@ class EntryFlow(nn.Module):
         )
 
         self.conv4_shortcut = nn.Sequential(
-            nn.Conv2d(128, 256, 1, stride=2), nn.BatchNorm2d(256),
+            nn.Conv2d(128, 256, 1, stride=2),
+            nn.BatchNorm2d(256),
         )
 
         # no downsampling

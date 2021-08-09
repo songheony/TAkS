@@ -127,24 +127,21 @@ class ResNext(nn.Module):
 
 
 def resnext50(grayscale=False, num_classes=100):
-    """ return a resnext50(c32x4d) network
-    """
+    """return a resnext50(c32x4d) network"""
     return ResNext(
         ResNextBottleNeckC, [3, 4, 6, 3], grayscale=grayscale, class_num=num_classes
     )
 
 
 def resnext101(grayscale=False, num_classes=100):
-    """ return a resnext101(c32x4d) network
-    """
+    """return a resnext101(c32x4d) network"""
     return ResNext(
         ResNextBottleNeckC, [3, 4, 23, 3], grayscale=grayscale, class_num=num_classes
     )
 
 
 def resnext152(grayscale=False, num_classes=100):
-    """ return a resnext101(c32x4d) network
-    """
+    """return a resnext101(c32x4d) network"""
     return ResNext(
         ResNextBottleNeckC, [3, 4, 36, 3], grayscale=grayscale, class_num=num_classes
     )

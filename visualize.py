@@ -252,7 +252,7 @@ def draw_lines(algorithms, acc):
         ),
         xaxis_title="Epoch",
         yaxis_title="Test accuracy",
-        font=dict(size=30, family="Arial",),
+        font=dict(size=30, family="Arial"),
     )
 
     return fig
@@ -592,9 +592,7 @@ def draw_prec_tables(
     txt_file.write_text(prec_latex)
 
 
-def draw_single(
-    log_dir, seed, algorithms, vis_algorithms, save_dir,
-):
+def draw_single(log_dir, seed, algorithms, vis_algorithms, save_dir):
     if isinstance(log_dir, str):
         log_dir = Path(log_dir)
     if isinstance(save_dir, str):

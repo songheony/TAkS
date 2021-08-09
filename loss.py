@@ -162,3 +162,38 @@ def loss_general(outputs, target, criterion):
 
     selected_inds = [[] for _ in range(len(outputs))]
     return losses, selected_inds
+
+
+def loss_tv(outputs, target, transition, gamma, regularization):
+    losses = []
+    for output in outputs:
+        loss = transition.loss(output, target) - gamma * regularization(output)
+        transition.update(output, target)
+        losses.append(loss)
+
+    selected_inds = [[] for _ in range(len(outputs))]
+    return losses, selected_inds
+
+
+def clip_cdr(model, nonzero_ratio, clip):
+    to_concat_g = []
+    to_concat_v = []
+    for name, param in model.named_parameters():
+        if param.dim() in [2, 4]:
+            to_concat_g.append(param.grad.data.view(-1))
+            to_concat_v.append(param.data.view(-1))
+    all_g = torch.cat(to_concat_g)
+    all_v = torch.cat(to_concat_v)
+    metric = torch.abs(all_g * all_v)
+    num_params = all_v.size(0)
+    nz = int(nonzero_ratio * num_params)
+    top_values, _ = torch.topk(metric, nz)
+    thresh = top_values[-1]
+
+    for name, param in model.named_parameters():
+        if param.dim() in [2, 4]:
+            mask = (torch.abs(param.data * param.grad.data) >= thresh).type(
+                torch.cuda.FloatTensor
+            )
+            mask = mask * clip
+            param.grad.data = mask * param.grad.data

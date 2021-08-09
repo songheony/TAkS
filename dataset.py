@@ -72,9 +72,7 @@ class TinyImageNet(Dataset):
     Tiny ImageNet data set available from `http://cs231n.stanford.edu/tiny-imagenet-200.zip`.
     """
 
-    def __init__(
-        self, root, transform=None, mode="train",
-    ):
+    def __init__(self, root, transform=None, mode="train"):
         self.root = os.path.join(root, "tiny-imagenet")
         self.mode = mode
         self.transform = transform
@@ -267,7 +265,11 @@ def flip_label(
             [[train_dataset.targets[i]] for i in range(len(train_dataset.targets))]
         )
         noisy_labels, P = noisify(
-            dataset_name, len(train_dataset.classes), labels, noise_type, noise_ratio,
+            dataset_name,
+            len(train_dataset.classes),
+            labels,
+            noise_type,
+            noise_ratio,
         )
         noisy_labels = np.array([i[0] for i in noisy_labels])
         noise_ind = np.where(np.array(train_dataset.targets) != noisy_labels)[0]
@@ -416,12 +418,17 @@ def load_datasets(
 
     if len(noise_classes) > 0:
         noise_train_label_path = os.path.join(
-            sub_dir, f"{noise_type}_{noise_classes}_train_label.npy",
+            sub_dir,
+            f"{noise_type}_{noise_classes}_train_label.npy",
         )
         noise_test_ind_path = os.path.join(
-            sub_dir, f"{noise_type}_{noise_classes}_test_ind.npy",
+            sub_dir,
+            f"{noise_type}_{noise_classes}_test_ind.npy",
         )
-        noise_ind_path = os.path.join(sub_dir, f"{noise_type}_{noise_classes}_ind.npy",)
+        noise_ind_path = os.path.join(
+            sub_dir,
+            f"{noise_type}_{noise_classes}_ind.npy",
+        )
         train_dataset, test_subdataset, noise_ind = delete_class(
             noise_classes,
             train_dataset,

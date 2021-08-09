@@ -182,9 +182,7 @@ def draw_sampels(
 
             fig.add_trace(scatter)
 
-            multi_fig.add_trace(
-                scatter, row=n // 2 + 1, col=n % 2 + 1,
-            )
+            multi_fig.add_trace(scatter, row=n // 2 + 1, col=n % 2 + 1)
         min_x.append(class_min_x)
         max_x.append(class_max_x)
         min_y.append(class_min_y)
@@ -262,9 +260,9 @@ def draw_heatmap(algorithm, n_samples, log_dir, seed, ind_path, save_dir):
             autosize=False,
             width=1200,
             height=900,
-            margin=go.layout.Margin(l=80, t=10,),
+            margin=go.layout.Margin(l=80, t=10),
             xaxis_title="Epoch",
-            font=dict(size=36, family="Arial",),
+            font=dict(size=36, family="Arial"),
         )
         fig.update_yaxes(showticklabels=False)
         fig.add_shape(
@@ -282,7 +280,7 @@ def draw_heatmap(algorithm, n_samples, log_dir, seed, ind_path, save_dir):
             incorrectly_y -= len(sorted_idx) * 0.01
         fig.add_annotation(
             dict(
-                font=dict(size=36, family="Arial",),
+                font=dict(size=36, family="Arial"),
                 x=-0.085,
                 y=incorrectly_y,
                 showarrow=False,
@@ -294,7 +292,7 @@ def draw_heatmap(algorithm, n_samples, log_dir, seed, ind_path, save_dir):
         )
         fig.add_annotation(
             dict(
-                font=dict(size=36, family="Arial",),
+                font=dict(size=36, family="Arial"),
                 x=-0.06,
                 y=len(clean_ind) / 2,
                 showarrow=False,
@@ -336,7 +334,11 @@ def draw_loss(algorithm, n_samples, log_dir, seed, ind_path, save_dir):
                 x.append(loss[selected_idxs[i - 1]].sum())
             fig.add_trace(
                 go.Scattergl(
-                    x=list(range(1, len(x) + 1)), y=x, mode="lines", name=vis_name, line=dict(width=8),
+                    x=list(range(1, len(x) + 1)),
+                    y=x,
+                    mode="lines",
+                    name=vis_name,
+                    line=dict(width=8),
                 )
             )
 
@@ -344,7 +346,9 @@ def draw_loss(algorithm, n_samples, log_dir, seed, ind_path, save_dir):
             autosize=False,
             width=1200,
             height=900,
-            legend=dict(orientation="h", yanchor="bottom", y=1, xanchor="right", x=0.75),
+            legend=dict(
+                orientation="h", yanchor="bottom", y=1, xanchor="right", x=0.75
+            ),
             margin=go.layout.Margin(
                 l=100,  # left margin
                 r=0,  # right margin
@@ -352,8 +356,13 @@ def draw_loss(algorithm, n_samples, log_dir, seed, ind_path, save_dir):
                 t=0,  # top margin
             ),
             xaxis_title="Epoch",
-            yaxis_title="Total selection risk" if target == "cum_loss" else "Selection risk",
-            font=dict(size=30, family="Arial",),
+            yaxis_title="Total selection risk"
+            if target == "cum_loss"
+            else "Selection risk",
+            font=dict(
+                size=30,
+                family="Arial",
+            ),
         )
         # fig.write_html(f"{save_dir}/{target}.html")
         fig.write_image(f"{save_dir}/{target}.pdf")
@@ -398,7 +407,14 @@ if __name__ == "__main__":
                 save_dir = f"results/minor/{dataset_name}/{noise_type}-{noise_ratio * 100}%/{args.model_name}/{args.algorithm}"
 
                 if args.algorithm == "Ours":
-                    draw_heatmap(args.algorithm, n_samples, log_dir, args.seed, ind_path, save_dir)
+                    draw_heatmap(
+                        args.algorithm,
+                        n_samples,
+                        log_dir,
+                        args.seed,
+                        ind_path,
+                        save_dir,
+                    )
 
                 (
                     train_dataset,

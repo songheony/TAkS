@@ -7,8 +7,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
-
 from torch.utils.data import DataLoader
+
+from tv import (
+    NoTransition,
+    categorical_transition,
+    dirichlet_transition,
+    no_regularization,
+    tv_regularization,
+)
 
 from player import Player, PrecisionSelector
 from model import get_model
@@ -19,6 +26,8 @@ from loss import (
     loss_coteaching,
     loss_coteaching_plus,
     loss_jocor,
+    loss_tv,
+    clip_cdr,
 )
 from dataset import load_datasets, selected_loader
 from utils import (
@@ -35,7 +44,14 @@ from utils import (
 
 
 def train(
-    train_loader, models, optimizers, criterion, epoch, device, method_name, **kwargs,
+    train_loader,
+    models,
+    optimizers,
+    criterion,
+    epoch,
+    device,
+    method_name,
+    **kwargs,
 ):
     loss_meters = []
     top1_meters = []
@@ -52,7 +68,7 @@ def train(
         top5_meters.append(top5_meter)
         show_logs += [loss_meter, top1_meter, top5_meter]
     progress = ProgressMeter(
-        len(train_loader), show_logs, prefix="Epoch: [{}]".format(epoch),
+        len(train_loader), show_logs, prefix="Epoch: [{}]".format(epoch)
     )
 
     # switch to train mode
@@ -89,11 +105,23 @@ def train(
                 )
             else:
                 losses, ind_updates = loss_coteaching_plus(
-                    outputs, target, kwargs["rate_schedule"][epoch], ind, epoch * i,
+                    outputs,
+                    target,
+                    kwargs["rate_schedule"][epoch],
+                    ind,
+                    epoch * i,
                 )
         elif method_name == "jocor":
             losses, ind_updates = loss_jocor(
                 outputs, target, kwargs["rate_schedule"][epoch], kwargs["co_lambda"]
+            )
+        elif method_name == "tv":
+            losses, ind_updates = loss_tv(
+                outputs,
+                target,
+                kwargs["transition"],
+                kwargs["gamma"],
+                kwargs["regularization"],
             )
         else:
             losses, ind_updates = loss_general(outputs, target, criterion)
@@ -102,9 +130,11 @@ def train(
             continue
 
         # compute gradient and do BP
-        for loss, optimizer in zip(losses, optimizers):
+        for loss, optimizer, model in zip(losses, optimizers, models):
             optimizer.zero_grad()
             loss.backward()
+            if method_name == "cdr":
+                clip_cdr(model, kwargs["nonzero_ratio"], kwargs["clip"])
             optimizer.step()
 
         # measure accuracy and record loss
@@ -167,7 +197,7 @@ def run(
     test_dataloader,
     models,
     optimizers,
-    adjust_learning_rate,
+    schedulers,
     criterion,
     epochs,
     device,
@@ -186,7 +216,7 @@ def run(
         start_time = time.time()
 
         if method_name in ["ours", "ftl", "greedy", "precision"]:
-            indices = np.where(kwargs["player"].w == 1)[0]
+            indices = np.where(kwargs["player"].w)[0]
             selected_dataloader = selected_loader(train_dataloader, indices)
         else:
             selected_dataloader = train_dataloader
@@ -203,15 +233,14 @@ def run(
         )
 
         if method_name in ["ours", "ftl", "greedy", "precision"]:
-            outputs, preds, targets = predict(
-                kwargs["fixed_train_dataloader"], models[0], device
-            )
-            loss, cum_loss, objective = kwargs["player"].update(outputs, preds, targets)
+            loss = predict(kwargs["fixed_train_dataloader"], models[0], device)
+            cum_loss, objective = kwargs["player"].update(loss)
             inds_updates = [indices]
         epoch_time = time.time() - start_time
 
-        for optimizer in optimizers:
-            adjust_learning_rate(optimizer, epoch)
+        if schedulers is not None:
+            for scheduler in schedulers:
+                scheduler.step()
 
         for i in range(len(models)):
             writers[i].add_scalar("Train/Loss", train_loss_avgs[i], epoch)
@@ -290,7 +319,7 @@ def run(
 
 def config_ours(train_dataset, batch_size, epochs, k_ratio, lr_ratio, use_total=True):
     fixed_train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=False, num_workers=8
+        train_dataset, batch_size=batch_size * 4, shuffle=False, num_workers=16
     )
 
     n_experts = len(train_dataset)
@@ -306,7 +335,7 @@ def config_precision(train_dataset, train_noise_ind, k_ratio, precision):
     n_experts = len(train_dataset)
     k = int(n_experts * k_ratio)
     player = PrecisionSelector(n_experts, k, precision, train_noise_ind)
-    return player, fixed_train_dataloader
+    return player
 
 
 def config_f_correction(
@@ -326,7 +355,11 @@ def config_f_correction(
             log_dir, dataset_log_dir, model_name, "Standard(Train-80.0%)", str(seed)
         )
 
-    standard_path = os.path.join(root_log_dir, "model0", "best_model.pt",)
+    standard_path = os.path.join(
+        root_log_dir,
+        "model0",
+        "best_model.pt",
+    )
     classifier = get_model(model_name, dataset_name).to(device)
     classifier.load_state_dict(torch.load(standard_path))
     classifier.eval()
@@ -368,6 +401,51 @@ def config_co_teaching_plus(dataset_name):
     return init_epoch
 
 
+def config_tv(
+    train_dataloader, epochs, device, dataset_name, transition_type, regularization_type
+):
+    num_iter_total = len(train_dataloader) * (epochs - 1)
+    num_iter_warmup = len(train_dataloader) * 10
+    num_classes = len(train_dataloader.dataset.classes)
+
+    if transition_type == "none":
+        transition = NoTransition()
+    elif transition_type == "categorical":
+        diagonal = np.log(0.5)
+        off_diagonal = np.log(0.5 / (num_classes - 1))
+        lr = 5e-3
+        transition = categorical_transition(
+            device,
+            num_classes,
+            num_iter_warmup,
+            num_iter_total,
+            diagonal,
+            off_diagonal,
+            lr,
+        )
+    elif transition_type == "dirichlet":
+        if dataset_name == "mnist":
+            diagonal = 10.0
+        elif dataset_name == "clothing1m":
+            diagonal = 1.0
+        else:
+            diagonal = 100.0
+        off_diagonal = 0.0
+        betas = (0.999, 0.01)
+        transition = dirichlet_transition(
+            device, num_classes, diagonal, off_diagonal, betas
+        )
+
+    if regularization_type == "none":
+        regularization = no_regularization
+    elif regularization_type == "tv":
+        regularization = tv_regularization(train_dataloader.batch_size)
+
+    gamma = 0.1
+
+    return transition, regularization, gamma
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
@@ -402,38 +480,14 @@ if __name__ == "__main__":
 
     if args.dataset_name in ["mnist", "cifar10", "cifar100", "tiny-imagenet"]:
         epochs = 201
-        epoch_decay_start = 80
         batch_size = 128
         learning_rate = 1e-3
-
-        mom1 = 0.9
-        mom2 = 0.1
-        alpha_plan = [learning_rate] * epochs
-        beta1_plan = [mom1] * epochs
-        for i in range(epoch_decay_start, epochs):
-            alpha_plan[i] = (
-                float(epochs - i) / (epochs - epoch_decay_start) * learning_rate
-            )
-            beta1_plan[i] = mom2
-
-        def adjust_learning_rate(optimizer, epoch):
-            for param_group in optimizer.param_groups:
-                param_group["lr"] = alpha_plan[epoch]
-                param_group["betas"] = (beta1_plan[epoch], 0.999)
 
     elif args.dataset_name == "clothing1m":
         epochs = 16
         batch_size = 64
-        learning_rate = 8e-4
-
-        def adjust_learning_rate(optimizer, epoch):
-            for param_group in optimizer.param_groups:
-                if epoch < 5:
-                    param_group["lr"] = 8e-4
-                elif epoch < 10:
-                    param_group["lr"] = 5e-4
-                elif epoch < 15:
-                    param_group["lr"] = 5e-5
+        learning_rate = 1e-3
+    schedulers = None
 
     train_dataset, valid_dataset, test_dataset, train_noise_ind = load_datasets(
         args.dataset_name,
@@ -445,14 +499,14 @@ if __name__ == "__main__":
         args.seed,
     )
     train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=8
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=16
     )
     test_dataloader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, num_workers=8
+        test_dataset, batch_size=batch_size, shuffle=False, num_workers=16
     )
     if valid_dataset is not None:
         valid_dataloader = DataLoader(
-            valid_dataset, batch_size=batch_size, shuffle=False, num_workers=8
+            valid_dataset, batch_size=batch_size, shuffle=False, num_workers=16
         )
     else:
         valid_dataloader = None
@@ -462,11 +516,13 @@ if __name__ == "__main__":
     else:
         if len(args.noise_classes) > 0:
             dataset_log_dir = os.path.join(
-                args.dataset_name, f"{args.noise_type}-{args.noise_classes}",
+                args.dataset_name,
+                f"{args.noise_type}-{args.noise_classes}",
             )
         else:
             dataset_log_dir = os.path.join(
-                args.dataset_name, f"{args.noise_type}-{args.noise_ratio * 100}%",
+                args.dataset_name,
+                f"{args.noise_type}-{args.noise_ratio * 100}%",
             )
 
     model_name = "jocor_model"
@@ -549,7 +605,9 @@ if __name__ == "__main__":
             train_dataset, batch_size, epochs, args.k_ratio, 0
         )
 
-        player = config_precision(train_dataset, train_noise_ind, args.k_ratio, args.precision)
+        player = config_precision(
+            train_dataset, train_noise_ind, args.k_ratio, args.precision
+        )
 
         models = [model]
         optimizers = [optimizer]
@@ -623,6 +681,38 @@ if __name__ == "__main__":
         models = [model1, model2]
         optimizers = [optimizer]
         kwargs = {"rate_schedule": rate_schedule, "co_lambda": args.co_lambda}
+    elif args.method_name == "tv":
+        transition_type = "dirichlet"
+        regularization_type = "tv"
+        algorithm_name = f"TV(Trans-{transition_type},Reg-{regularization_type})"
+        model = get_model(model_name, args.dataset_name).to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+        transition, regularization, gamma = config_tv(
+            train_dataloader,
+            epochs,
+            device,
+            args.dataset_name,
+            transition_type,
+            regularization_type,
+        )
+
+        models = [model]
+        optimizers = [optimizer]
+        kwargs = {
+            "transition": transition,
+            "regularization": regularization,
+            "gamma": gamma,
+        }
+    elif args.method_name == "cdr":
+        clip = 1 - args.noise_ratio
+        algorithm_name = f"CDR(Clip-{clip})"
+        model = get_model(model_name, args.dataset_name).to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+        models = [model]
+        optimizers = [optimizer]
+        kwargs = {"nonzero_ratio": clip, "clip": clip}
 
     criterion = nn.CrossEntropyLoss()
 
@@ -651,7 +741,7 @@ if __name__ == "__main__":
         test_dataloader,
         models,
         optimizers,
-        adjust_learning_rate,
+        schedulers,
         criterion,
         epochs,
         device,

@@ -67,13 +67,11 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-def predict(train_loader, model, device, softmax=True):
+def predict(train_loader, model, criterion, device):
     # switch to evaluate mode
     model.eval()
 
-    outputs = []
-    preds = []
-    targets = []
+    losses = []
     with torch.no_grad():
         for i, data in enumerate(train_loader):
             if len(data) == 3:
@@ -87,21 +85,13 @@ def predict(train_loader, model, device, softmax=True):
 
             # compute output
             output = model(images)
-            if softmax:
-                output = F.softmax(output, dim=1).detach()
-            else:
-                output = output.detach()
-            outputs.append(output)
 
-            pred = torch.argmax(output, dim=1)
-            preds.append(pred)
+            # compute loss
+            loss = criterion(output, target)
+            losses.append(loss)
 
-            targets.append(target)
-
-    outputs = torch.cat(outputs, dim=0)
-    preds = torch.cat(preds, dim=0)
-    targets = torch.cat(targets, dim=0)
-    return outputs, preds, targets
+    losses = torch.cat(losses, dim=0)
+    return losses
 
 
 class NoiseEstimator:
@@ -200,7 +190,7 @@ def save_pickle(data, pickle_path):
 
 # flipping code from https://github.com/hongxin001/JoCoR
 def multiclass_noisify(y, P):
-    """ Flip classes according to transition probability matrix T.
+    """Flip classes according to transition probability matrix T.
     It expects a number between 0 and the number of classes - 1.
     """
     assert P.shape[0] == P.shape[1]
@@ -225,7 +215,7 @@ def multiclass_noisify(y, P):
 # noisify_pairflip call the function "multiclass_noisify"
 def noisify_pairflip(y_train, noise, nb_classes=10):
     """mistakes:
-        flip in the pair
+    flip in the pair
     """
     P = np.eye(nb_classes)
     n = noise
@@ -248,7 +238,7 @@ def noisify_pairflip(y_train, noise, nb_classes=10):
 
 def noisify_multiclass_symmetric(y_train, noise, nb_classes=10):
     """mistakes:
-        flip in the symmetric way
+    flip in the symmetric way
     """
     P = np.ones((nb_classes, nb_classes))
     n = noise
@@ -272,10 +262,10 @@ def noisify_multiclass_symmetric(y_train, noise, nb_classes=10):
 
 def noisify_mnist_asymmetric(y_train, noise):
     """mistakes:
-        1 <- 7
-        2 -> 7
-        3 -> 8
-        5 <-> 6
+    1 <- 7
+    2 -> 7
+    3 -> 8
+    5 <-> 6
     """
     nb_classes = 10
     P = np.eye(nb_classes)
@@ -306,10 +296,10 @@ def noisify_mnist_asymmetric(y_train, noise):
 
 def noisify_cifar10_asymmetric(y_train, noise):
     """mistakes:
-        automobile <- truck
-        bird -> airplane
-        cat <-> dog
-        deer -> horse
+    automobile <- truck
+    bird -> airplane
+    cat <-> dog
+    deer -> horse
     """
     nb_classes = 10
     P = np.eye(nb_classes)
@@ -339,8 +329,7 @@ def noisify_cifar10_asymmetric(y_train, noise):
 
 
 def build_for_cifar100(size, noise):
-    """ The noise matrix flips to the "next" class with probability 'noise'.
-    """
+    """The noise matrix flips to the "next" class with probability 'noise'."""
 
     assert (noise >= 0.0) and (noise <= 1.0)
 
@@ -356,8 +345,7 @@ def build_for_cifar100(size, noise):
 
 
 def noisify_cifar100_asymmetric(y_train, noise):
-    """mistakes are inside the same superclass of 10 classes, e.g. 'fish'
-    """
+    """mistakes are inside the same superclass of 10 classes, e.g. 'fish'"""
     nb_classes = 100
     P = np.eye(nb_classes)
     n = noise

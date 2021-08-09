@@ -12,9 +12,7 @@ import torch.nn as nn
 
 
 class BasicBlock(nn.Module):
-    """Basic Block for resnet 18 and resnet 34
-
-    """
+    """Basic Block for resnet 18 and resnet 34"""
 
     # BasicBlock and BottleNeck block
     # have different output size
@@ -69,9 +67,7 @@ class BasicBlock(nn.Module):
 
 
 class BottleNeck(nn.Module):
-    """Residual block for resnet over 50 layers
-
-    """
+    """Residual block for resnet over 50 layers"""
 
     expansion = 4
 
@@ -179,40 +175,35 @@ class ResNet(nn.Module):
 
 
 def resnet18(grayscale=False, num_classes=100):
-    """ return a ResNet 18 object
-    """
+    """return a ResNet 18 object"""
     return ResNet(
         BasicBlock, [2, 2, 2, 2], grayscale=grayscale, num_classes=num_classes
     )
 
 
 def resnet34(grayscale=False, num_classes=100):
-    """ return a ResNet 34 object
-    """
+    """return a ResNet 34 object"""
     return ResNet(
         BasicBlock, [3, 4, 6, 3], grayscale=grayscale, num_classes=num_classes
     )
 
 
 def resnet50(grayscale=False, num_classes=100):
-    """ return a ResNet 50 object
-    """
+    """return a ResNet 50 object"""
     return ResNet(
         BottleNeck, [3, 4, 6, 3], grayscale=grayscale, num_classes=num_classes
     )
 
 
 def resnet101(grayscale=False, num_classes=100):
-    """ return a ResNet 101 object
-    """
+    """return a ResNet 101 object"""
     return ResNet(
         BottleNeck, [3, 4, 23, 3], grayscale=grayscale, num_classes=num_classes
     )
 
 
 def resnet152(grayscale=False, num_classes=100):
-    """ return a ResNet 152 object
-    """
+    """return a ResNet 152 object"""
     return ResNet(
         BottleNeck, [3, 8, 36, 3], grayscale=grayscale, num_classes=num_classes
     )
