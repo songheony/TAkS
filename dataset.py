@@ -211,32 +211,32 @@ class DeepMind(Dataset):
             num_raters = 10
             image_feature_description = {
                 # the raw image
-                'image/raw': tf.io.FixedLenFeature([], tf.string),
+                "image/raw": tf.io.FixedLenFeature([], tf.string),
                 # the clean label
-                'image/class/label': tf.io.FixedLenFeature([1], tf.int64),
+                "image/class/label": tf.io.FixedLenFeature([1], tf.int64),
                 # noisy labels from all the raters
-                'noisy_labels': tf.io.FixedLenFeature([num_raters], tf.int64),
+                "noisy_labels": tf.io.FixedLenFeature([num_raters], tf.int64),
                 # the IDs of rater models
-                'rater_ids': tf.io.FixedLenFeature([num_raters], tf.string),
+                "rater_ids": tf.io.FixedLenFeature([num_raters], tf.string),
             }
-            self.image_key = 'image/raw'
-            self.clean_label_key = 'image/class/label'
+            self.image_key = "image/raw"
+            self.clean_label_key = "image/class/label"
         elif task_name == "cifar100":
             num_raters = 11
             image_feature_description = {
                 # the raw image
-                'image/encoded': tf.io.FixedLenFeature([], tf.string),
+                "image/encoded": tf.io.FixedLenFeature([], tf.string),
                 # the fine-grained clean label, value in [0, 99]
-                'image/class/fine_label': tf.io.FixedLenFeature([1], tf.int64),
+                "image/class/fine_label": tf.io.FixedLenFeature([1], tf.int64),
                 # the coarse clean label, value in [0, 19]
-                'image/class/coarse_label': tf.io.FixedLenFeature([1], tf.int64),
+                "image/class/coarse_label": tf.io.FixedLenFeature([1], tf.int64),
                 # noisy labels from all the raters
-                'noisy_labels': tf.io.FixedLenFeature([num_raters], tf.int64),
+                "noisy_labels": tf.io.FixedLenFeature([num_raters], tf.int64),
                 # the IDs of rater models
-                'rater_ids': tf.io.FixedLenFeature([num_raters], tf.string),
+                "rater_ids": tf.io.FixedLenFeature([num_raters], tf.string),
             }
-            self.image_key = 'image/encoded'
-            self.clean_label_key = 'image/class/fine_label'
+            self.image_key = "image/encoded"
+            self.clean_label_key = "image/class/fine_label"
 
         def _parse_image_function(example_proto):
             # Parse the input tf.train.Example proto using the dictionary above.
@@ -255,7 +255,9 @@ class DeepMind(Dataset):
 
     def __getitem__(self, index):
         features = self.parsed_image_dataset[index]
-        image = tf.reshape(tf.io.decode_raw(features[self.image_key], tf.uint8), (32, 32, 3)).numpy()
+        image = tf.reshape(
+            tf.io.decode_raw(features[self.image_key], tf.uint8), (32, 32, 3)
+        ).numpy()
         image = Image.fromarray(image)
         noisy_label = self.noisy_labels[index]
 
@@ -494,18 +496,44 @@ def load_datasets(
         else:
             noise_level = "high"
         if dataset_name == "cifar10":
-            train_dataset = DeepMind(root=root, task_name="cifar10", noise_level=noise_level, mode="train", transform=train_transform)
-            valid_dataset = DeepMind(root=root, task_name="cifar10", noise_level=noise_level, mode="valid", transform=test_transform)
+            train_dataset = DeepMind(
+                root=root,
+                task_name="cifar10",
+                noise_level=noise_level,
+                mode="train",
+                transform=train_transform,
+            )
+            valid_dataset = DeepMind(
+                root=root,
+                task_name="cifar10",
+                noise_level=noise_level,
+                mode="valid",
+                transform=test_transform,
+            )
             test_dataset = datasets.CIFAR10(
                 root=root, download=True, train=False, transform=test_transform
             )
         elif dataset_name == "cifar100":
-            train_dataset = DeepMind(root=root, task_name="cifar100", noise_level=noise_level, mode="train", transform=train_transform)
-            valid_dataset = DeepMind(root=root, task_name="cifar100", noise_level=noise_level, mode="valid", transform=test_transform)
+            train_dataset = DeepMind(
+                root=root,
+                task_name="cifar100",
+                noise_level=noise_level,
+                mode="train",
+                transform=train_transform,
+            )
+            valid_dataset = DeepMind(
+                root=root,
+                task_name="cifar100",
+                noise_level=noise_level,
+                mode="valid",
+                transform=test_transform,
+            )
             test_dataset = datasets.CIFAR100(
                 root=root, download=True, train=False, transform=test_transform
             )
-        noise_ind = np.where(np.array(train_dataset.clean_labels) != train_dataset.noisy_labels)[0]
+        noise_ind = np.where(
+            np.array(train_dataset.clean_labels) != train_dataset.noisy_labels
+        )[0]
         return (
             DatasetWithIndex(train_dataset),
             valid_dataset,
