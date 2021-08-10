@@ -1,6 +1,7 @@
 import os
 import argparse
 import glob
+import json
 import numpy as np
 from PIL import Image
 import torch
@@ -8,6 +9,8 @@ from torch.utils.data.sampler import Sampler
 from torch.utils.data import random_split, DataLoader, Dataset, Subset
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+
+import tensorflow as tf
 
 from utils import noisify, seed_all
 
@@ -189,6 +192,82 @@ class Clothing1M(Dataset):
         return len(self.imgs)
 
 
+class DeepMind(Dataset):
+    r"""https://github.com/deepmind/deepmind-research/blob/master/noisy_label"""
+
+    def __init__(self, root, transform, task_name, noise_level, mode, rater_idx=0):
+        self.root = os.path.join(root, "DeepMind", task_name, noise_level)
+        self.transform = transform
+        self.task_name = task_name
+        self.noise_level = noise_level
+        self.mode = mode
+        self.rater_idx = rater_idx
+
+        image_path = os.path.join(self.root, mode) + "*"
+        raw_image_dataset = tf.data.TFRecordDataset(tf.io.gfile.glob(image_path))
+
+        # Create a dictionary describing the features.
+        if task_name == "cifar10":
+            num_raters = 10
+            image_feature_description = {
+                # the raw image
+                'image/raw': tf.io.FixedLenFeature([], tf.string),
+                # the clean label
+                'image/class/label': tf.io.FixedLenFeature([1], tf.int64),
+                # noisy labels from all the raters
+                'noisy_labels': tf.io.FixedLenFeature([num_raters], tf.int64),
+                # the IDs of rater models
+                'rater_ids': tf.io.FixedLenFeature([num_raters], tf.string),
+            }
+            self.image_key = 'image/raw'
+            self.clean_label_key = 'image/class/label'
+        elif task_name == "cifar100":
+            num_raters = 11
+            image_feature_description = {
+                # the raw image
+                'image/encoded': tf.io.FixedLenFeature([], tf.string),
+                # the fine-grained clean label, value in [0, 99]
+                'image/class/fine_label': tf.io.FixedLenFeature([1], tf.int64),
+                # the coarse clean label, value in [0, 19]
+                'image/class/coarse_label': tf.io.FixedLenFeature([1], tf.int64),
+                # noisy labels from all the raters
+                'noisy_labels': tf.io.FixedLenFeature([num_raters], tf.int64),
+                # the IDs of rater models
+                'rater_ids': tf.io.FixedLenFeature([num_raters], tf.string),
+            }
+            self.image_key = 'image/encoded'
+            self.clean_label_key = 'image/class/fine_label'
+
+        def _parse_image_function(example_proto):
+            # Parse the input tf.train.Example proto using the dictionary above.
+            return tf.io.parse_single_example(example_proto, image_feature_description)
+
+        self.parsed_image_dataset = list(raw_image_dataset.map(_parse_image_function))
+
+        self.clean_labels = []
+        self.noisy_labels = []
+        for index in range(len(self.parsed_image_dataset)):
+            features = self.parsed_image_dataset[index]
+            clean_label = features[self.clean_label_key].numpy()
+            noisy_label = features["noisy_labels"].numpy()[self.rater_idx]
+            self.clean_labels.append(clean_label)
+            self.noisy_labels.append(noisy_label)
+
+    def __getitem__(self, index):
+        features = self.parsed_image_dataset[index]
+        image = tf.reshape(tf.io.decode_raw(features[self.image_key], tf.uint8), (32, 32, 3)).numpy()
+        image = Image.fromarray(image)
+        noisy_label = self.noisy_labels[index]
+
+        if self.transform is not None:
+            image = self.transform(image)
+
+        return image, noisy_label
+
+    def __len__(self):
+        return len(self.clean_labels)
+
+
 def selected_loader(train_loader, indices):
     sampler = IndicesSampler(indices, True)
     selected_dataloader = DataLoader(
@@ -322,7 +401,7 @@ def load_datasets(
                 # transforms.Normalize([0.5], [0.5]),
             ]
         )
-    elif dataset_name.startswith("cifar"):
+    elif dataset_name.startswith("cifar") or dataset_name.startswith("deepmind"):
         train_transform = transforms.Compose(
             [
                 # transforms.Resize(32),
@@ -401,17 +480,40 @@ def load_datasets(
         train_dataset = Clothing1M(root=root, mode="train", transform=train_transform)
         test_dataset = Clothing1M(root=root, mode="test", transform=test_transform)
         valid_dataset = Clothing1M(root=root, mode="valid", transform=test_transform)
-
-    else:
-        raise NameError("Invalid dataset name")
-
-    if dataset_name == "clothing1m":
         return (
             DatasetWithIndex(train_dataset),
             valid_dataset,
             test_dataset,
             [],
         )
+    elif dataset_name.statswith("deepmind"):
+        if noise_ratio <= 0.2:
+            noise_level = "low"
+        elif noise_ratio < 0.8:
+            noise_level = "medium"
+        else:
+            noise_level = "high"
+        if dataset_name == "cifar10":
+            train_dataset = DeepMind(root=root, task_name="cifar10", noise_level=noise_level, mode="train", transform=train_transform)
+            valid_dataset = DeepMind(root=root, task_name="cifar10", noise_level=noise_level, mode="valid", transform=test_transform)
+            test_dataset = datasets.CIFAR10(
+                root=root, download=True, train=False, transform=test_transform
+            )
+        elif dataset_name == "cifar100":
+            train_dataset = DeepMind(root=root, task_name="cifar100", noise_level=noise_level, mode="train", transform=train_transform)
+            valid_dataset = DeepMind(root=root, task_name="cifar100", noise_level=noise_level, mode="valid", transform=test_transform)
+            test_dataset = datasets.CIFAR100(
+                root=root, download=True, train=False, transform=test_transform
+            )
+        noise_ind = np.where(np.array(train_dataset.clean_labels) != train_dataset.noisy_labels)[0]
+        return (
+            DatasetWithIndex(train_dataset),
+            valid_dataset,
+            test_dataset,
+            noise_ind,
+        )
+    else:
+        raise NameError("Invalid dataset name")
 
     sub_dir = os.path.join("./data", f"changed_{dataset_name}_{seed}")
     os.makedirs(sub_dir, exist_ok=True)
