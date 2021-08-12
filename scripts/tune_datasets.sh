@@ -16,8 +16,7 @@ noise_ratios=(0.2 0.5 0.8)
 # create dataset
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./dataset.py --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -27,7 +26,7 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
         for (( l=0; l<${#lr_ratios[@]}; l++ )); do
             for (( m=0; m<${#k_diffs[@]}; m++ )); do
                 k_ratio=$(python -c "print(1-${noise_ratios[$k]}+${k_diffs[$m]})")
-                python ./main.py --method_name "ours" --k_ratio $k_ratio --lr_ratio ${lr_ratios[$l]} --seed $seed --gpu $gpu --log_dir $log_dir --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]} --train_ratio $train_ratio
+                python ./main.py --method_name "ours" --k_ratio $k_ratio --lr_ratio ${lr_ratios[$l]} --train_ratio 0.9 --seed $seed --gpu $gpu --log_dir $log_dir --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]} --train_ratio $train_ratio
             done
         done
     done
@@ -40,8 +39,7 @@ noise_ratios=(0.4)
 # create dataset
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./dataset.py --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -51,7 +49,7 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
         for (( l=0; l<${#lr_ratios[@]}; l++ )); do
             for (( m=0; m<${#k_diffs[@]}; m++ )); do
                 k_ratio=$(python -c "print(1-${noise_ratios[$k]}/2+${k_diffs[$m]})")
-                python ./main.py --method_name "ours" --k_ratio $k_ratio --lr_ratio ${lr_ratios[$l]} --seed $seed --gpu $gpu --log_dir $log_dir --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]} --train_ratio $train_ratio
+                python ./main.py --method_name "ours" --k_ratio $k_ratio --lr_ratio ${lr_ratios[$l]} --train_ratio 0.9 --seed $seed --gpu $gpu --log_dir $log_dir --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]} --train_ratio $train_ratio
             done
         done
     done

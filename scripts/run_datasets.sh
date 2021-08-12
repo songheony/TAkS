@@ -3,7 +3,7 @@ declare -A k_ratios
 declare -A co_lambdas
 
 # dataset
-datasets=("mnist" "cifar10" "cifar100")
+datasets=("cifar10" "cifar100" "mnist")
 
 # general
 seed=$1
@@ -18,7 +18,6 @@ forget_ratios=(0.2 0.5 0.8)
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
         python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./dataset.py --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -57,14 +56,16 @@ co_lambdas[2,2]=0.85
 
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./main.py --method_name "standard" --train_ratio 0.8 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "standard" --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "f-correction" --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "decouple" --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "co-teaching" --forget_rate ${forget_ratios[$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "co-teaching+" --forget_rate ${forget_ratios[$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "jocor" --forget_rate ${forget_ratios[$k]} --co_lambda ${co_lambdas[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        common="--train_ratio 0.8 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
+        python ./main.py --method_name "standard" $common
+        python ./main.py --method_name "f-correction" $common
+        python ./main.py --method_name "decouple" $common
+        python ./main.py --method_name "co-teaching" --forget_rate ${forget_ratios[$k]} $common
+        python ./main.py --method_name "co-teaching+" --forget_rate ${forget_ratios[$k]} $common
+        python ./main.py --method_name "jocor" --forget_rate ${forget_ratios[$k]} --co_lambda ${co_lambdas[$j,$k]} $common
+        python ./main.py --method_name "cdr" $common
+        python ./main.py --method_name "tv" $common
+        # python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} $common
     done
 done
 
@@ -77,7 +78,6 @@ forget_ratios=(0.2)
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
         python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./dataset.py --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -98,13 +98,15 @@ co_lambdas[2,0]=0.85
 
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./main.py --method_name "standard" --train_ratio 0.8 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "standard" --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "f-correction" --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "decouple" --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "co-teaching" --forget_rate ${forget_ratios[$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "co-teaching+" --forget_rate ${forget_ratios[$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "jocor" --forget_rate ${forget_ratios[$k]} --co_lambda ${co_lambdas[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        common="--train_ratio 0.8 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
+        python ./main.py --method_name "standard" $common
+        python ./main.py --method_name "f-correction" $common
+        python ./main.py --method_name "decouple" $common
+        python ./main.py --method_name "co-teaching" --forget_rate ${forget_ratios[$k]} $common
+        python ./main.py --method_name "co-teaching+" --forget_rate ${forget_ratios[$k]} $common
+        python ./main.py --method_name "jocor" --forget_rate ${forget_ratios[$k]} --co_lambda ${co_lambdas[$j,$k]} $common
+        python ./main.py --method_name "cdr" $common
+        python ./main.py --method_name "tv" $common
+        # python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} $common
     done
 done

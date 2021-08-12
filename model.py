@@ -1,11 +1,12 @@
 """https://github.com/weiaicunzai/pytorch-cifar100"""
 
-import torch
+import torch.nn as nn
 import models.attention as attention
 import models.densenet as densenet
 import models.googlenet as googlenet
 import models.inceptionv3 as inceptionv3
 import models.inceptionv4 as inceptionv4
+import models.lenet as lenet
 import models.mobilenet as mobilenet
 import models.mobilenetv2 as mobilenetv2
 import models.nasnet as nasnet
@@ -19,11 +20,9 @@ import models.shufflenetv2 as shufflenetv2
 import models.squeezenet as squeezenet
 import models.vgg as vgg
 import models.xception as xception
-from models.jocor_model import MLPNet, CNN
-from models.preact_resnet import PreActResNet18
 
 
-def get_model(model_name, dataset_name):
+def get_model(model_name, dataset_name, device):
     if dataset_name == "mnist":
         grayscale = True
         num_classes = 10
@@ -42,22 +41,7 @@ def get_model(model_name, dataset_name):
     else:
         raise NameError("Invalid dataset")
 
-    if model_name == "jocor_model":
-        if dataset_name == "mnist":
-            net = MLPNet()
-        elif dataset_name == "cifar10":
-            net = CNN(n_outputs=10)
-        elif dataset_name == "cifar100":
-            net = CNN(n_outputs=100)
-        elif dataset_name == "tiny-imagenet":
-            net = PreActResNet18(num_classes)
-        elif dataset_name == "clothing1m":
-            model = getattr(resnet, "resnet18")
-            net = model(grayscale, num_classes)
-            net = torch.nn.DataParallel(net, device_ids=[0, 1, 2, 3])
-        return net
-
-    elif model_name.startswith("attention"):
+    if model_name.startswith("attention"):
         model = getattr(attention, model_name)
     elif model_name.startswith("densenet"):
         model = getattr(densenet, model_name)
@@ -67,6 +51,8 @@ def get_model(model_name, dataset_name):
         model = getattr(inceptionv3, model_name)
     elif model_name.startswith("inception"):
         model = getattr(inceptionv4, model_name)
+    elif model_name.startswith("lenet"):
+        model = getattr(lenet, model_name)
     elif model_name.startswith("mobilenetv2"):
         model = getattr(mobilenetv2, model_name)
     elif model_name.startswith("mobilenet"):
@@ -97,7 +83,11 @@ def get_model(model_name, dataset_name):
         raise NameError("Invalid model")
 
     net = model(grayscale, num_classes)
-    if dataset_name == "clothing1m":
-        net = torch.nn.DataParallel(net, device_ids=[0, 1, 2, 3])
 
-    return model(grayscale, num_classes)
+    if device == "cuda:0":
+        device_ids = [0, 1, 2, 3]
+    else:
+        device_ids = [4, 5, 6, 7]
+    net = nn.DataParallel(net, device_ids=device_ids).to(device)
+
+    return net

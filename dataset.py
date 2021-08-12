@@ -12,7 +12,8 @@ import torchvision.datasets as datasets
 
 import tensorflow as tf
 
-from utils import noisify, seed_all
+from utils import seed_all
+from notify import noisify
 
 
 class DatasetWithIndex(Dataset):
@@ -248,7 +249,7 @@ class DeepMind(Dataset):
         self.noisy_labels = []
         for index in range(len(self.parsed_image_dataset)):
             features = self.parsed_image_dataset[index]
-            clean_label = features[self.clean_label_key].numpy()
+            clean_label = features[self.clean_label_key].numpy()[0]
             noisy_label = features["noisy_labels"].numpy()[self.rater_idx]
             self.clean_labels.append(clean_label)
             self.noisy_labels.append(noisy_label)
@@ -390,33 +391,31 @@ def load_datasets(
     if dataset_name == "mnist":
         train_transform = transforms.Compose(
             [
-                # transforms.Resize(28),
-                # transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                # transforms.Normalize([0.5], [0.5]),
             ]
         )
         test_transform = transforms.Compose(
             [
-                # transforms.Resize(28),
                 transforms.ToTensor(),
-                # transforms.Normalize([0.5], [0.5]),
             ]
         )
     elif dataset_name.startswith("cifar") or dataset_name.startswith("deepmind"):
         train_transform = transforms.Compose(
             [
-                # transforms.Resize(32),
-                # transforms.RandomHorizontalFlip(),
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                transforms.Normalize(
+                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                ),
             ]
         )
         test_transform = transforms.Compose(
             [
-                # transforms.Resize(32),
                 transforms.ToTensor(),
-                # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                transforms.Normalize(
+                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                ),
             ]
         )
     elif dataset_name == "tiny-imagenet":
@@ -532,7 +531,7 @@ def load_datasets(
                 root=root, download=True, train=False, transform=test_transform
             )
         noise_ind = np.where(
-            np.array(train_dataset.clean_labels) != train_dataset.noisy_labels
+            np.array(train_dataset.clean_labels) != np.array(train_dataset.noisy_labels)
         )[0]
         return (
             DatasetWithIndex(train_dataset),
@@ -568,7 +567,7 @@ def load_datasets(
             noise_ind_path,
         )
 
-    elif noise_type == "symmetric" or noise_type == "asymmetric":
+    elif noise_type in ["symmetric", "asymmetric"]:
         noise_label_path = os.path.join(
             sub_dir, f"{noise_type}_{noise_ratio}_label.npy"
         )

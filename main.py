@@ -9,49 +9,25 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
-from tv import (
-    NoTransition,
-    categorical_transition,
-    dirichlet_transition,
-    no_regularization,
-    tv_regularization,
-)
-
-from player import Player, PrecisionSelector
 from model import get_model
-from loss import (
-    loss_general,
-    loss_forward,
-    loss_decouple,
-    loss_coteaching,
-    loss_coteaching_plus,
-    loss_jocor,
-    loss_tv,
-    clip_cdr,
-)
-from dataset import load_datasets, selected_loader
+from dataset import load_datasets
 from utils import (
     seed_all,
-    AverageMeter,
-    ProgressMeter,
-    accuracy,
-    predict,
-    NoiseEstimator,
     save_metric,
     save_best_metric,
     save_pickle,
 )
+from meter import AverageMeter, ProgressMeter, accuracy
 
 
 def train(
+    method,
     train_loader,
     models,
     optimizers,
     criterion,
     epoch,
     device,
-    method_name,
-    **kwargs,
 ):
     loss_meters = []
     top1_meters = []
@@ -86,45 +62,8 @@ def train(
             outputs.append(output)
 
         # calculate loss and selected index
-        if method_name in ["ours", "ftl", "greedy", "precision"]:
-            ind = indexes.cpu().numpy()
-            losses, ind_updates = loss_general(outputs, target, criterion)
-        elif method_name == "f-correction":
-            losses, ind_updates = loss_forward(outputs, target, kwargs["P"])
-        elif method_name == "decouple":
-            losses, ind_updates = loss_decouple(outputs, target, criterion)
-        elif method_name == "co-teaching":
-            losses, ind_updates = loss_coteaching(
-                outputs, target, kwargs["rate_schedule"][epoch]
-            )
-        elif method_name == "co-teaching+":
-            ind = indexes.cpu().numpy().transpose()
-            if epoch < kwargs["init_epoch"]:
-                losses, ind_updates = loss_coteaching(
-                    outputs, target, kwargs["rate_schedule"][epoch]
-                )
-            else:
-                losses, ind_updates = loss_coteaching_plus(
-                    outputs,
-                    target,
-                    kwargs["rate_schedule"][epoch],
-                    ind,
-                    epoch * i,
-                )
-        elif method_name == "jocor":
-            losses, ind_updates = loss_jocor(
-                outputs, target, kwargs["rate_schedule"][epoch], kwargs["co_lambda"]
-            )
-        elif method_name == "tv":
-            losses, ind_updates = loss_tv(
-                outputs,
-                target,
-                kwargs["transition"],
-                kwargs["gamma"],
-                kwargs["regularization"],
-            )
-        else:
-            losses, ind_updates = loss_general(outputs, target, criterion)
+        ind = indexes.cpu().numpy().transpose()
+        losses, ind_updates = method.loss(outputs, target, epoch=epoch, ind=ind)
 
         if None in losses or any(~torch.isfinite(torch.tensor(losses))):
             continue
@@ -133,8 +72,8 @@ def train(
         for loss, optimizer, model in zip(losses, optimizers, models):
             optimizer.zero_grad()
             loss.backward()
-            if method_name == "cdr":
-                clip_cdr(model, kwargs["nonzero_ratio"], kwargs["clip"])
+            if hasattr(method, "post_backward_hook"):
+                method.post_backward_hook(model)
             optimizer.step()
 
         # measure accuracy and record loss
@@ -192,6 +131,7 @@ def validate(val_loader, model, criterion, device, is_test):
 
 
 def run(
+    method,
     train_dataloader,
     valid_dataloader,
     test_dataloader,
@@ -202,9 +142,7 @@ def run(
     epochs,
     device,
     writers,
-    method_name,
     train_noise_ind,
-    **kwargs,
 ):
     metrics = [[] for _ in range(len(models))]
     selected_idxs = [[] for _ in range(len(models))]
@@ -215,27 +153,26 @@ def run(
     for epoch in range(1, epochs):
         start_time = time.time()
 
-        if method_name in ["ours", "ftl", "greedy", "precision"]:
-            indices = np.where(kwargs["player"].w)[0]
-            selected_dataloader = selected_loader(train_dataloader, indices)
+        if hasattr(method, "pre_iter_hook"):
+            selected_dataloader = method.pre_iter_hook(train_dataloader)
         else:
             selected_dataloader = train_dataloader
 
         train_loss_avgs, train_top1_avgs, train_top5_avgs, inds_updates = train(
+            method,
             selected_dataloader,
             models,
             optimizers,
             criterion,
             epoch,
             device,
-            method_name,
-            **kwargs,
         )
 
-        if method_name in ["ours", "ftl", "greedy", "precision"]:
-            loss = predict(kwargs["fixed_train_dataloader"], models[0], device)
-            cum_loss, objective = kwargs["player"].update(loss)
-            inds_updates = [indices]
+        if hasattr(method, "post_iter_hook"):
+            loss, cum_loss, objective, inds_updates = method.post_iter_hook(
+                model, device
+            )
+
         epoch_time = time.time() - start_time
 
         if schedulers is not None:
@@ -283,7 +220,7 @@ def run(
             }
             metrics[i].append(metric)
 
-            if method_name in ["ours", "ftl", "greedy", "precision"]:
+            if hasattr(method, "post_iter_hook"):
                 loss_path = os.path.join(writers[i].log_dir, f"loss_{epoch}.npy")
                 np.save(loss_path, loss)
 
@@ -317,135 +254,6 @@ def run(
     return metrics, selected_idxs, best_epochs
 
 
-def config_ours(train_dataset, batch_size, epochs, k_ratio, lr_ratio, use_total=True):
-    fixed_train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size * 4, shuffle=False, num_workers=16
-    )
-
-    n_experts = len(train_dataset)
-    if 0 < k_ratio <= 1:
-        k = int(n_experts * k_ratio)
-        player = Player(n_experts, k, epochs, lr_ratio, use_total=use_total)
-    else:
-        raise ValueError("k_ratio should be less than 1 and greater than 0")
-    return player, fixed_train_dataloader
-
-
-def config_precision(train_dataset, train_noise_ind, k_ratio, precision):
-    n_experts = len(train_dataset)
-    k = int(n_experts * k_ratio)
-    player = PrecisionSelector(n_experts, k, precision, train_noise_ind)
-    return player
-
-
-def config_f_correction(
-    dataset_name, log_dir, dataset_log_dir, model_name, dataloader, seed, device
-):
-    if dataset_name == "cifar100":
-        filter_outlier = False
-    else:
-        filter_outlier = True
-
-    if dataset_name == "clothing1m":
-        root_log_dir = os.path.join(
-            log_dir, dataset_log_dir, model_name, "Standard", str(seed)
-        )
-    else:
-        root_log_dir = os.path.join(
-            log_dir, dataset_log_dir, model_name, "Standard(Train-80.0%)", str(seed)
-        )
-
-    standard_path = os.path.join(
-        root_log_dir,
-        "model0",
-        "best_model.pt",
-    )
-    classifier = get_model(model_name, dataset_name).to(device)
-    classifier.load_state_dict(torch.load(standard_path))
-    classifier.eval()
-    est = NoiseEstimator(
-        classifier=classifier, alpha=0.0, filter_outlier=filter_outlier
-    )
-    est.fit(dataloader, device)
-    P_est = torch.tensor(est.predict().copy(), dtype=torch.float).to(device)
-    del est
-    del classifier
-
-    return P_est
-
-
-def config_co_teaching(dataset_name, forget_rate, epochs):
-    exponent = 1
-    if dataset_name in ["mnist", "cifar10", "cifar100", "tiny-imagenet"]:
-        num_gradual = 10
-    elif dataset_name == "clothing1m":
-        num_gradual = 5
-
-    rate_schedule = np.ones(epochs) * forget_rate
-    rate_schedule[:num_gradual] = np.linspace(0, forget_rate ** exponent, num_gradual)
-    return rate_schedule
-
-
-def config_co_teaching_plus(dataset_name):
-    if dataset_name == "mnist":
-        init_epoch = 0
-    elif dataset_name == "cifar10":
-        init_epoch = 20
-    elif dataset_name == "cifar100":
-        init_epoch = 5
-    elif dataset_name == "tiny-imagenet":
-        init_epoch = 100
-    else:
-        init_epoch = 5
-
-    return init_epoch
-
-
-def config_tv(
-    train_dataloader, epochs, device, dataset_name, transition_type, regularization_type
-):
-    num_iter_total = len(train_dataloader) * (epochs - 1)
-    num_iter_warmup = len(train_dataloader) * 10
-    num_classes = len(train_dataloader.dataset.classes)
-
-    if transition_type == "none":
-        transition = NoTransition()
-    elif transition_type == "categorical":
-        diagonal = np.log(0.5)
-        off_diagonal = np.log(0.5 / (num_classes - 1))
-        lr = 5e-3
-        transition = categorical_transition(
-            device,
-            num_classes,
-            num_iter_warmup,
-            num_iter_total,
-            diagonal,
-            off_diagonal,
-            lr,
-        )
-    elif transition_type == "dirichlet":
-        if dataset_name == "mnist":
-            diagonal = 10.0
-        elif dataset_name == "clothing1m":
-            diagonal = 1.0
-        else:
-            diagonal = 100.0
-        off_diagonal = 0.0
-        betas = (0.999, 0.01)
-        transition = dirichlet_transition(
-            device, num_classes, diagonal, off_diagonal, betas
-        )
-
-    if regularization_type == "none":
-        regularization = no_regularization
-    elif regularization_type == "tv":
-        regularization = tv_regularization(train_dataloader.batch_size)
-
-    gamma = 0.1
-
-    return transition, regularization, gamma
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
@@ -464,6 +272,7 @@ if __name__ == "__main__":
     # ours
     parser.add_argument("--k_ratio", type=float, default=0.2)
     parser.add_argument("--lr_ratio", type=float, default=1e-3)
+    parser.add_argument("--use_total", type=bool, default=True)
 
     # precision
     parser.add_argument("--precision", type=float, default=0.2)
@@ -478,16 +287,31 @@ if __name__ == "__main__":
 
     device = f"cuda:{args.gpu}"
 
-    if args.dataset_name in ["mnist", "cifar10", "cifar100", "tiny-imagenet"]:
+    if args.dataset_name in [
+        "mnist",
+        "cifar10",
+        "cifar100",
+        "tiny-imagenet",
+        "deepmind-cifar10",
+        "deepmind-cifar100",
+    ]:
         epochs = 201
-        batch_size = 128
-        learning_rate = 1e-3
-
+        batch_size = 512
+        if args.dataset_name == "mnist":
+            model_name = "lenet5"
+        elif args.dataset_name in ["cifar10", "deepmind-cifar10"]:
+            model_name = "resnet18"
+        elif args.dataset_name in ["cifar100", "deepmind-cifar100"]:
+            model_name = "resnet18"
+        elif args.dataset_name == "tiny-imagenet":
+            model_name = "resnet18"
     elif args.dataset_name == "clothing1m":
         epochs = 16
         batch_size = 64
-        learning_rate = 1e-3
+        model_name = "resnet50"
+
     schedulers = None
+    learning_rate = 1e-3
 
     train_dataset, valid_dataset, test_dataset, train_noise_ind = load_datasets(
         args.dataset_name,
@@ -511,116 +335,32 @@ if __name__ == "__main__":
     else:
         valid_dataloader = None
 
-    if args.dataset_name == "clothing1m":
+    if args.noise_type not in ["symmetric", "asymmetric"]:
         dataset_log_dir = args.dataset_name
     else:
         if len(args.noise_classes) > 0:
             dataset_log_dir = os.path.join(
                 args.dataset_name,
-                f"{args.noise_type}-{args.noise_classes}",
+                f"delete({args.noise_classes})",
             )
         else:
             dataset_log_dir = os.path.join(
                 args.dataset_name,
-                f"{args.noise_type}-{args.noise_ratio * 100}%",
+                f"{args.noise_type}({args.noise_ratio * 100}%)",
             )
 
-    model_name = "jocor_model"
-    kwargs = {}
+    if args.train_ratio < 1:
+        dataset_log_dir += f"-Train({args.noise_ratio * 100}%)"
+
+    criterion = nn.CrossEntropyLoss()
     if args.method_name == "standard":
-        if args.train_ratio == 1:
-            algorithm_name = "Standard"
-        else:
-            algorithm_name = f"Standard(Train-{args.train_ratio * 100}%)"
-        model = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-        models = [model]
-        optimizers = [optimizer]
-    elif args.method_name == "ours":
-        algorithm_name = f"Ours(K_ratio-{args.k_ratio*100}%,Lr-{args.lr_ratio})"
-        model = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        from methods.standard import Standard
 
-        player, fixed_train_dataloader = config_ours(
-            train_dataset,
-            batch_size,
-            epochs,
-            args.k_ratio,
-            args.lr_ratio,
-        )
-
-        models = [model]
-        optimizers = [optimizer]
-        kwargs = {
-            "player": player,
-            "fixed_train_dataloader": fixed_train_dataloader,
-        }
-    elif args.method_name == "ftl":
-        algorithm_name = f"FTL(K_ratio-{args.k_ratio*100}%)"
-        model = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-        player, fixed_train_dataloader = config_ours(
-            train_dataset,
-            batch_size,
-            epochs,
-            args.k_ratio,
-            0,
-        )
-
-        models = [model]
-        optimizers = [optimizer]
-        kwargs = {
-            "player": player,
-            "fixed_train_dataloader": fixed_train_dataloader,
-        }
-    elif args.method_name == "greedy":
-        algorithm_name = f"Greedy(K_ratio-{args.k_ratio*100}%)"
-        model = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-        player, fixed_train_dataloader = config_ours(
-            train_dataset,
-            batch_size,
-            epochs,
-            args.k_ratio,
-            0,
-            use_total=False,
-        )
-
-        models = [model]
-        optimizers = [optimizer]
-        kwargs = {
-            "player": player,
-            "fixed_train_dataloader": fixed_train_dataloader,
-        }
-    elif args.method_name == "precision":
-        algorithm_name = (
-            f"Precision(K_ratio-{args.k_ratio*100}%,Precision-{args.precision})"
-        )
-        model = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-        _, fixed_train_dataloader = config_ours(
-            train_dataset, batch_size, epochs, args.k_ratio, 0
-        )
-
-        player = config_precision(
-            train_dataset, train_noise_ind, args.k_ratio, args.precision
-        )
-
-        models = [model]
-        optimizers = [optimizer]
-        kwargs = {
-            "player": player,
-            "fixed_train_dataloader": fixed_train_dataloader,
-        }
+        method = Standard(criterion)
     elif args.method_name == "f-correction":
-        algorithm_name = "F-correction"
-        model = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        from methods.f_correction import F_correction
 
-        P_est = config_f_correction(
+        method = F_correction(
             args.dataset_name,
             args.log_dir,
             dataset_log_dir,
@@ -629,66 +369,33 @@ if __name__ == "__main__":
             args.seed,
             device,
         )
-
-        models = [model]
-        optimizers = [optimizer]
-        kwargs = {"P": P_est}
     elif args.method_name == "decouple":
-        algorithm_name = "Decouple"
-        model1 = get_model(model_name, args.dataset_name).to(device)
-        optimizer1 = torch.optim.Adam(model1.parameters(), lr=learning_rate)
-        model2 = get_model(model_name, args.dataset_name).to(device)
-        optimizer2 = torch.optim.Adam(model2.parameters(), lr=learning_rate)
-        models = [model1, model2]
-        optimizers = [optimizer1, optimizer2]
+        from methods.decouple import Decouple
+
+        method = Decouple(criterion)
     elif args.method_name == "co-teaching":
-        algorithm_name = f"Co-teaching(Forget-{args.forget_rate * 100}%)"
-        model1 = get_model(model_name, args.dataset_name).to(device)
-        optimizer1 = torch.optim.Adam(model1.parameters(), lr=learning_rate)
-        model2 = get_model(model_name, args.dataset_name).to(device)
-        optimizer2 = torch.optim.Adam(model2.parameters(), lr=learning_rate)
+        from methods.co_teaching import Co_teaching
 
-        rate_schedule = config_co_teaching(args.dataset_name, args.forget_rate, epochs)
-
-        models = [model1, model2]
-        optimizers = [optimizer1, optimizer2]
-        kwargs = {"rate_schedule": rate_schedule}
+        method = Co_teaching(args.dataset_name, args.forget_rate, epochs)
     elif args.method_name == "co-teaching+":
-        algorithm_name = f"Co-teaching+(Forget-{args.forget_rate * 100}%)"
-        model1 = get_model(model_name, args.dataset_name).to(device)
-        optimizer1 = torch.optim.Adam(model1.parameters(), lr=learning_rate)
-        model2 = get_model(model_name, args.dataset_name).to(device)
-        optimizer2 = torch.optim.Adam(model2.parameters(), lr=learning_rate)
+        from methods.co_teaching_plus import Co_teaching_plus
 
-        rate_schedule = config_co_teaching(args.dataset_name, args.forget_rate, epochs)
-        init_epoch = config_co_teaching_plus(args.dataset_name)
-
-        models = [model1, model2]
-        optimizers = [optimizer1, optimizer2]
-        kwargs = {"rate_schedule": rate_schedule, "init_epoch": init_epoch}
+        method = Co_teaching_plus(args.dataset_name, args.forget_rate, epochs)
     elif args.method_name == "jocor":
-        algorithm_name = (
-            f"JoCoR(Forget-{args.forget_rate * 100}%,Lambda-{args.co_lambda})"
-        )
-        model1 = get_model(model_name, args.dataset_name).to(device)
-        model2 = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(
-            list(model1.parameters()) + list(model2.parameters()), lr=learning_rate
-        )
+        from methods.jocor import JoCoR
 
-        rate_schedule = config_co_teaching(args.dataset_name, args.forget_rate, epochs)
+        method = JoCoR(args.dataset_name, args.forget_rate, epochs, args.co_lambda)
+    elif args.method_name == "cdr":
+        clip = 1 - args.noise_ratio
+        from methods.cdr import CDR
 
-        models = [model1, model2]
-        optimizers = [optimizer]
-        kwargs = {"rate_schedule": rate_schedule, "co_lambda": args.co_lambda}
+        method = CDR(clip)
     elif args.method_name == "tv":
         transition_type = "dirichlet"
         regularization_type = "tv"
-        algorithm_name = f"TV(Trans-{transition_type},Reg-{regularization_type})"
-        model = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        from methods.tv import TV
 
-        transition, regularization, gamma = config_tv(
+        method = TV(
             train_dataloader,
             epochs,
             device,
@@ -696,28 +403,52 @@ if __name__ == "__main__":
             transition_type,
             regularization_type,
         )
+    elif args.method_name == "taks":
+        from methods.taks import TAkS
 
-        models = [model]
-        optimizers = [optimizer]
-        kwargs = {
-            "transition": transition,
-            "regularization": regularization,
-            "gamma": gamma,
-        }
-    elif args.method_name == "cdr":
-        clip = 1 - args.noise_ratio
-        algorithm_name = f"CDR(Clip-{clip})"
-        model = get_model(model_name, args.dataset_name).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        method = TAkS(
+            criterion,
+            train_dataset,
+            batch_size,
+            epochs,
+            args.k_ratio,
+            args.lr_ratio,
+            args.use_total,
+        )
+    elif args.method_name == "precision":
+        from methods.precision import Precision
 
-        models = [model]
-        optimizers = [optimizer]
-        kwargs = {"nonzero_ratio": clip, "clip": clip}
+        method = Precision(
+            criterion,
+            train_dataset,
+            batch_size,
+            epochs,
+            args.k_ratio,
+            args.precision,
+            train_noise_ind,
+        )
+    else:
+        raise NameError(f"Invalid method_name: {args.method_name}")
 
-    criterion = nn.CrossEntropyLoss()
+    models = []
+    for i in range(method.num_models):
+        model = get_model(model_name, args.dataset_name, device)
+        models.append(model)
+
+    optimizers = []
+    if args.method_name == "jocor":
+        parameters = []
+        for i in range(method.num_models):
+            parameters += list(models[i].parameters())
+        optimizer = torch.optim.Adam(parameters, lr=learning_rate)
+        optimizers.append(optimizer)
+    else:
+        for i in range(method.num_models):
+            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            optimizers.append(optimizer)
 
     root_log_dir = os.path.join(
-        args.log_dir, dataset_log_dir, model_name, algorithm_name, str(args.seed)
+        args.log_dir, dataset_log_dir, model_name, method.name, str(args.seed)
     )
     if os.path.exists(root_log_dir):
         for i in range(len(models)):
@@ -736,6 +467,7 @@ if __name__ == "__main__":
         writers.append(writer)
 
     metrics, selected_idxs, best_epochs = run(
+        method,
         train_dataloader,
         valid_dataloader,
         test_dataloader,
@@ -746,9 +478,7 @@ if __name__ == "__main__":
         epochs,
         device,
         writers,
-        args.method_name,
         train_noise_ind,
-        **kwargs,
     )
     writer.close()
 

@@ -8,6 +8,80 @@ from torch.distributions import Dirichlet, Categorical
 default_activation = lambda t: F.softmax(t, dim=1)
 
 
+class TV:
+    def __init__(
+        self,
+        train_dataloader,
+        epochs,
+        device,
+        dataset_name,
+        transition_type,
+        regularization_type,
+    ):
+        self.train_dataloader = train_dataloader
+        self.epochs = epochs
+        self.device = device
+        self.dataset_name = dataset_name
+        self.transition_type = transition_type
+        self.regularization_type = regularization_type
+
+        self.name = f"TV(Trans-{self.transition_type},Regul-{self.regularization_type})"
+        self.num_models = 1
+        self._config()
+
+    def _config(self):
+        num_iter_total = len(self.train_dataloader) * (self.epochs - 1)
+        num_iter_warmup = len(self.train_dataloader) * 10
+        num_classes = len(self.train_dataloader.dataset.classes)
+
+        if self.transition_type == "none":
+            self.transition = NoTransition()
+        elif self.transition_type == "categorical":
+            diagonal = np.log(0.5)
+            off_diagonal = np.log(0.5 / (num_classes - 1))
+            lr = 5e-3
+            self.transition = categorical_transition(
+                self.device,
+                num_classes,
+                num_iter_warmup,
+                num_iter_total,
+                diagonal,
+                off_diagonal,
+                lr,
+            )
+        elif self.transition_type == "dirichlet":
+            if self.dataset_name == "mnist":
+                diagonal = 10.0
+            elif self.dataset_name == "clothing1m":
+                diagonal = 1.0
+            else:
+                diagonal = 100.0
+            off_diagonal = 0.0
+            betas = (0.999, 0.01)
+            self.transition = dirichlet_transition(
+                self.device, num_classes, diagonal, off_diagonal, betas
+            )
+
+        if self.regularization_type == "none":
+            self.regularization = no_regularization
+        elif self.regularization_type == "tv":
+            self.regularization = tv_regularization(self.train_dataloader.batch_size)
+
+        self.gamma = 0.1
+
+    def loss(self, outputs, target, *args, **kwargs):
+        losses = []
+        for output in outputs:
+            loss = self.transition.loss(
+                output, target
+            ) - self.gamma * self.regularization(output)
+            self.transition.update(output, target)
+            losses.append(loss)
+
+        selected_inds = [[] for _ in range(len(outputs))]
+        return losses, selected_inds
+
+
 def indirect_observation_loss(transition_matrix, activation=None):
     if activation is None:
         activation = lambda t: F.softmax(t, dim=1)

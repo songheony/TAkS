@@ -16,7 +16,6 @@ noise_ratios=(0.2 0.5 0.8)
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
         python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./dataset.py --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -46,9 +45,10 @@ k_ratios[2,2]=0.15
 
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./main.py --method_name "greedy" --k_ratio ${k_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "ftl" --k_ratio ${k_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        common="--train_ratio 0.8 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
+        python ./main.py --method_name "greedy" --k_ratio ${k_ratios[$j,$k]} $common
+        python ./main.py --method_name "ftl" --k_ratio ${k_ratios[$j,$k]} $common
+        python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} $common
     done
 done
 
@@ -60,7 +60,6 @@ noise_ratios=(0.4)
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
         python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./dataset.py --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -78,8 +77,9 @@ k_ratios[2,0]=0.7
 
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./main.py --method_name "greedy" --k_ratio ${k_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "ftl" --k_ratio ${k_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
-        python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        common="--train_ratio 0.8 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
+        python ./main.py --method_name "greedy" --k_ratio ${k_ratios[$j,$k]} $common
+        python ./main.py --method_name "ftl" --k_ratio ${k_ratios[$j,$k]} $common
+        python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} $common
     done
 done
