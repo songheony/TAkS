@@ -108,7 +108,7 @@ class NoiseEstimator:
                 output = F.softmax(output, dim=1).detach()
                 eta_corr.append(output)
 
-        eta_corr = eta_corr.cat(eta_corr, dim=0)
+        eta_corr = torch.cat(eta_corr, dim=0)
         eta_corr = eta_corr.cpu().numpy()
 
         c = len(train_dataloader.dataset.classes)
