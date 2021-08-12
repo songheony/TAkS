@@ -444,7 +444,7 @@ if __name__ == "__main__":
         optimizers.append(optimizer)
     else:
         for i in range(method.num_models):
-            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            optimizer = torch.optim.Adam(models[i].parameters(), lr=learning_rate)
             optimizers.append(optimizer)
 
     root_log_dir = os.path.join(

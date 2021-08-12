@@ -1,4 +1,4 @@
-import numpy as np
+import torch
 
 
 class Decouple:
@@ -10,9 +10,9 @@ class Decouple:
 
     def loss(self, outputs, target, *args, **kwargs):
         output1, output2 = outputs
-        pred1 = np.argmax(output1.detach().cpu().numpy(), axis=1)
-        pred2 = np.argmax(output2.detach().cpu().numpy(), axis=1)
-        ind_update = np.where(pred1 != pred2)[0]
+        pred1 = torch.argmax(output1.data, dim=1)
+        pred2 = torch.argmax(output2.data, dim=1)
+        ind_update = (pred1 != pred2).nonzero(as_tuple=True)[0]
 
         if len(ind_update) > 0:
             loss1 = self.criterion(output1[ind_update], target[ind_update])
