@@ -39,11 +39,12 @@ class Co_teaching_plus:
             losses, ind_updates = self.loss_coteaching_plus(
                 outputs,
                 target,
+                epoch,
                 ind,
             )
         return losses, ind_updates
 
-    def loss_coteaching_plus(self, outputs, target, ind):
+    def loss_coteaching_plus(self, outputs, target, epoch, ind):
         logits, logits2 = outputs
 
         outputs = F.softmax(logits, dim=1)
@@ -79,7 +80,7 @@ class Co_teaching_plus:
             update_outputs2 = outputs2[disagree_id]
 
             losses, ind_updates = self.co_teaching.loss(
-                [update_outputs, update_outputs2], update_labels
+                [update_outputs, update_outputs2], update_labels, epoch
             )
             loss_1, loss_2 = losses
             ind_1_update, ind_2_update = ind_updates

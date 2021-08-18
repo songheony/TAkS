@@ -25,7 +25,6 @@ def train(
     train_loader,
     models,
     optimizers,
-    criterion,
     epoch,
     device,
 ):
@@ -150,11 +149,11 @@ def run(
     best_valid_top1s = [0 for _ in range(len(models))]
     best_epochs = [0 for _ in range(len(models))]
 
-    for epoch in range(1, epochs):
+    for epoch in range(1, epochs + 1):
         start_time = time.time()
 
-        if hasattr(method, "pre_iter_hook"):
-            selected_dataloader = method.pre_iter_hook(train_dataloader)
+        if hasattr(method, "pre_epoch_hook"):
+            selected_dataloader = method.pre_epoch_hook(train_dataloader)
         else:
             selected_dataloader = train_dataloader
 
@@ -163,13 +162,12 @@ def run(
             selected_dataloader,
             models,
             optimizers,
-            criterion,
             epoch,
             device,
         )
 
-        if hasattr(method, "post_iter_hook"):
-            loss, cum_loss, objective, inds_updates = method.post_iter_hook(
+        if hasattr(method, "post_epoch_hook"):
+            loss, cum_loss, objective, inds_updates = method.post_epoch_hook(
                 model, device
             )
 
@@ -287,31 +285,32 @@ if __name__ == "__main__":
 
     device = f"cuda:{args.gpu}"
 
-    if args.dataset_name in [
-        "mnist",
-        "cifar10",
-        "cifar100",
-        "tiny-imagenet",
-        "deepmind-cifar10",
-        "deepmind-cifar100",
-    ]:
-        epochs = 201
+    if args.dataset_name == "mnist":
+        epochs = 30
+        batch_size = 128
+        model_name = "lenet5"
+        step_size = 5
+        gamma = 0.1
+    elif args.dataset_name in ["cifar10", "deepmind-cifar10"]:
+        epochs = 200
         batch_size = 512
-        if args.dataset_name == "mnist":
-            model_name = "lenet5"
-        elif args.dataset_name in ["cifar10", "deepmind-cifar10"]:
-            model_name = "resnet18"
-        elif args.dataset_name in ["cifar100", "deepmind-cifar100"]:
-            model_name = "resnet18"
-        elif args.dataset_name == "tiny-imagenet":
-            model_name = "resnet18"
+        model_name = "resnet26"
+        step_size = 40
+        gamma = 0.1
+    elif args.dataset_name in ["cifar100", "deepmind-cifar100", "tiny-imagenet"]:
+        epochs = 120
+        batch_size = 512
+        model_name = "preactresnet56"
+        step_size = 40
+        gamma = 0.1
     elif args.dataset_name == "clothing1m":
-        epochs = 16
-        batch_size = 64
+        epochs = 10
+        batch_size = 32
         model_name = "resnet50"
+        step_size = 5
+        gamma = 0.1
 
-    schedulers = None
-    learning_rate = 1e-3
+    learning_rate = 0.001
 
     train_dataset, valid_dataset, test_dataset, train_noise_ind = load_datasets(
         args.dataset_name,
@@ -389,7 +388,7 @@ if __name__ == "__main__":
         clip = 1 - args.noise_ratio
         from methods.cdr import CDR
 
-        method = CDR(clip)
+        method = CDR(criterion, clip)
     elif args.method_name == "tv":
         transition_type = "dirichlet"
         regularization_type = "tv"
@@ -402,6 +401,20 @@ if __name__ == "__main__":
             args.dataset_name,
             transition_type,
             regularization_type,
+        )
+    elif args.method_name == "class2simi":
+        loss_type = "forward"
+        from methods.class2simi import Class2Simi
+
+        method = Class2Simi(
+            loss_type,
+            args.dataset_name,
+            args.log_dir,
+            dataset_log_dir,
+            model_name,
+            train_dataloader,
+            args.seed,
+            device,
         )
     elif args.method_name == "taks":
         from methods.taks import TAkS
@@ -436,16 +449,21 @@ if __name__ == "__main__":
         models.append(model)
 
     optimizers = []
+    schedulers = []
     if args.method_name == "jocor":
         parameters = []
         for i in range(method.num_models):
             parameters += list(models[i].parameters())
         optimizer = torch.optim.Adam(parameters, lr=learning_rate)
         optimizers.append(optimizer)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size, gamma)
+        schedulers.append(scheduler)
     else:
         for i in range(method.num_models):
             optimizer = torch.optim.Adam(models[i].parameters(), lr=learning_rate)
             optimizers.append(optimizer)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size, gamma)
+            schedulers.append(scheduler)
 
     root_log_dir = os.path.join(
         args.log_dir, dataset_log_dir, model_name, method.name, str(args.seed)

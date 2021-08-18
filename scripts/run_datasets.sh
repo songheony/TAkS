@@ -3,7 +3,7 @@ declare -A k_ratios
 declare -A co_lambdas
 
 # dataset
-datasets=("cifar10" "cifar100" "mnist")
+datasets=("mnist" "cifar10" "cifar100")
 
 # general
 seed=$1
@@ -11,13 +11,13 @@ gpu=$2
 
 # symmetric
 noise_type="symmetric"
-noise_ratios=(0.2 0.5 0.8)
-forget_ratios=(0.2 0.5 0.8)
+noise_ratios=(0.2 0.4 0.6)
+forget_ratios=(0.2 0.4 0.6)
 
 # create dataset
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -56,7 +56,7 @@ co_lambdas[2,2]=0.85
 
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        common="--train_ratio 0.8 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
+        common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
         python ./main.py --method_name "standard" $common
         python ./main.py --method_name "f-correction" $common
         python ./main.py --method_name "decouple" $common
@@ -65,19 +65,20 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
         python ./main.py --method_name "jocor" --forget_rate ${forget_ratios[$k]} --co_lambda ${co_lambdas[$j,$k]} $common
         python ./main.py --method_name "cdr" $common
         python ./main.py --method_name "tv" $common
+        python ./main.py --method_name "class2simi" $common
         # python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} $common
     done
 done
 
 # asymmetric
 noise_type="asymmetric"
-noise_ratios=(0.4)
-forget_ratios=(0.2)
+noise_ratios=(0.2 0.4 0.6)
+forget_ratios=(0.2 0.4 0.6)
 
 # create dataset
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -98,7 +99,7 @@ co_lambdas[2,0]=0.85
 
 for (( j=0; j<${#datasets[@]}; j++ )); do
     for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        common="--train_ratio 0.8 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
+        common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
         python ./main.py --method_name "standard" $common
         python ./main.py --method_name "f-correction" $common
         python ./main.py --method_name "decouple" $common
@@ -107,6 +108,7 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
         python ./main.py --method_name "jocor" --forget_rate ${forget_ratios[$k]} --co_lambda ${co_lambdas[$j,$k]} $common
         python ./main.py --method_name "cdr" $common
         python ./main.py --method_name "tv" $common
+        python ./main.py --method_name "class2simi" $common
         # python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} $common
     done
 done

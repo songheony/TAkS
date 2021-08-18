@@ -38,12 +38,12 @@ class TAkS:
         else:
             raise ValueError("k_ratio should be less than 1 and greater than 0")
 
-    def pre_iter_hook(self, train_dataloader):
+    def pre_epoch_hook(self, train_dataloader):
         indices = np.where(self.player.w)[0]
         selected_dataloader = selected_loader(train_dataloader, indices)
         return selected_dataloader
 
-    def post_iter_hook(self, model, device):
+    def post_epoch_hook(self, model, device):
         indices = np.where(self.player.w)[0]
         loss = calc_loss(self.fixed_train_dataloader, model, device)
         cum_loss, objective = self.player.update(loss)

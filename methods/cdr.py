@@ -2,7 +2,8 @@ import torch
 
 
 class CDR:
-    def __init__(self, clip):
+    def __init__(self, criterion, clip):
+        self.criterion = criterion
         self.clip = clip
 
         self.name = f"CDR(Clip-{self.clip})"

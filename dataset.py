@@ -1,16 +1,11 @@
 import os
 import argparse
-import glob
-import json
 import numpy as np
-from PIL import Image
 import torch
 from torch.utils.data.sampler import Sampler
 from torch.utils.data import random_split, DataLoader, Dataset, Subset
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-
-import tensorflow as tf
 
 from utils import seed_all
 from notify import noisify
@@ -69,206 +64,6 @@ class IndicesSampler(Sampler):
 
     def __len__(self):
         return len(self.indices)
-
-
-class TinyImageNet(Dataset):
-    """from https://github.com/leemengtaiwan/tiny-imagenet
-    Tiny ImageNet data set available from `http://cs231n.stanford.edu/tiny-imagenet-200.zip`.
-    """
-
-    def __init__(self, root, transform=None, mode="train"):
-        self.root = os.path.join(root, "tiny-imagenet")
-        self.mode = mode
-        self.transform = transform
-
-        self.images = []
-        self.targets = []
-
-        # build class label - number mapping
-        self.classes = []
-        self.cls2idx = {}
-        with open(os.path.join(self.root, "wnids.txt"), "r") as fp:
-            for i, text in enumerate(fp.readlines()):
-                num = text.strip("\n")
-                self.classes.append(num)
-                self.cls2idx[num] = i
-
-        if self.mode == "train":
-            self.image_paths = sorted(
-                glob.iglob(
-                    os.path.join(self.root, "train", "**", "*.JPEG"), recursive=True
-                )
-            )
-            for img_path in self.image_paths:
-                file_name = os.path.basename(img_path)
-                label_text = file_name.split("_")[0]
-                self.targets.append(self.cls2idx[label_text])
-
-        elif self.mode == "test":
-            self.image_paths = []
-            with open(os.path.join(self.root, "val", "val_annotations.txt"), "r") as fp:
-                for line in fp.readlines():
-                    terms = line.split("\t")
-                    file_name, label_text = terms[0], terms[1]
-                    self.image_paths.append(
-                        os.path.join(self.root, "val", "images", file_name)
-                    )
-                    self.targets.append(self.cls2idx[label_text])
-
-    def __len__(self):
-        return len(self.image_paths)
-
-    def __getitem__(self, index):
-        img_path = self.image_paths[index]
-        target = self.targets[index]
-
-        image = Image.open(img_path).convert("RGB")
-
-        if self.transform is not None:
-            image = self.transform(image)
-
-        return image, target
-
-
-class Clothing1M(Dataset):
-    r"""https://github.com/LiJunnan1992/MLNT"""
-
-    def __init__(self, root, transform, mode):
-        self.root = os.path.join(root, "Clothing 1M")
-        self.anno_dir = os.path.join(self.root, "annotations")
-        self.transform = transform
-        self.mode = mode
-
-        self.imgs = []
-        self.labels = {}
-
-        if self.mode == "train":
-            self.img_list_file = "noisy_train_key_list.txt"
-            self.label_list_file = "noisy_label_kv.txt"
-        elif self.mode == "test":
-            self.img_list_file = "clean_test_key_list.txt"
-            self.label_list_file = "clean_label_kv.txt"
-        elif self.mode == "valid":
-            self.img_list_file = "clean_val_key_list.txt"
-            self.label_list_file = "clean_label_kv.txt"
-
-        self.classes = [
-            "T-Shirt",
-            "Shirt",
-            "Knitwear",
-            "Chiffon",
-            "Sweater",
-            "Hoodie",
-            "Windbreaker",
-            "Jacket",
-            "Downcoat",
-            "Suit",
-            "Shawl",
-            "Dress",
-            "Vest",
-            "Underwear",
-        ]
-
-        with open(os.path.join(self.anno_dir, self.img_list_file), "r") as f:
-            lines = f.read().splitlines()
-            for l in lines:
-                self.imgs.append(os.path.join(self.root, l))
-
-        with open(os.path.join(self.anno_dir, self.label_list_file), "r") as f:
-            lines = f.read().splitlines()
-            for l in lines:
-                entry = l.split()
-                img_path = os.path.join(self.root, entry[0])
-                self.labels[img_path] = int(entry[1])
-
-    def __getitem__(self, index):
-        img_path = self.imgs[index]
-        target = self.labels[img_path]
-
-        image = Image.open(img_path).convert("RGB")
-        img = self.transform(image)
-        return img, target
-
-    def __len__(self):
-        return len(self.imgs)
-
-
-class DeepMind(Dataset):
-    r"""https://github.com/deepmind/deepmind-research/blob/master/noisy_label"""
-
-    def __init__(self, root, transform, task_name, noise_level, mode, rater_idx=0):
-        self.root = os.path.join(root, "DeepMind", task_name, noise_level)
-        self.transform = transform
-        self.task_name = task_name
-        self.noise_level = noise_level
-        self.mode = mode
-        self.rater_idx = rater_idx
-
-        image_path = os.path.join(self.root, mode) + "*"
-        raw_image_dataset = tf.data.TFRecordDataset(tf.io.gfile.glob(image_path))
-
-        # Create a dictionary describing the features.
-        if task_name == "cifar10":
-            num_raters = 10
-            image_feature_description = {
-                # the raw image
-                "image/raw": tf.io.FixedLenFeature([], tf.string),
-                # the clean label
-                "image/class/label": tf.io.FixedLenFeature([1], tf.int64),
-                # noisy labels from all the raters
-                "noisy_labels": tf.io.FixedLenFeature([num_raters], tf.int64),
-                # the IDs of rater models
-                "rater_ids": tf.io.FixedLenFeature([num_raters], tf.string),
-            }
-            self.image_key = "image/raw"
-            self.clean_label_key = "image/class/label"
-        elif task_name == "cifar100":
-            num_raters = 11
-            image_feature_description = {
-                # the raw image
-                "image/encoded": tf.io.FixedLenFeature([], tf.string),
-                # the fine-grained clean label, value in [0, 99]
-                "image/class/fine_label": tf.io.FixedLenFeature([1], tf.int64),
-                # the coarse clean label, value in [0, 19]
-                "image/class/coarse_label": tf.io.FixedLenFeature([1], tf.int64),
-                # noisy labels from all the raters
-                "noisy_labels": tf.io.FixedLenFeature([num_raters], tf.int64),
-                # the IDs of rater models
-                "rater_ids": tf.io.FixedLenFeature([num_raters], tf.string),
-            }
-            self.image_key = "image/encoded"
-            self.clean_label_key = "image/class/fine_label"
-
-        def _parse_image_function(example_proto):
-            # Parse the input tf.train.Example proto using the dictionary above.
-            return tf.io.parse_single_example(example_proto, image_feature_description)
-
-        self.parsed_image_dataset = list(raw_image_dataset.map(_parse_image_function))
-
-        self.clean_labels = []
-        self.noisy_labels = []
-        for index in range(len(self.parsed_image_dataset)):
-            features = self.parsed_image_dataset[index]
-            clean_label = features[self.clean_label_key].numpy()[0]
-            noisy_label = features["noisy_labels"].numpy()[self.rater_idx]
-            self.clean_labels.append(clean_label)
-            self.noisy_labels.append(noisy_label)
-
-    def __getitem__(self, index):
-        features = self.parsed_image_dataset[index]
-        image = tf.reshape(
-            tf.io.decode_raw(features[self.image_key], tf.uint8), (32, 32, 3)
-        ).numpy()
-        image = Image.fromarray(image)
-        noisy_label = self.noisy_labels[index]
-
-        if self.transform is not None:
-            image = self.transform(image)
-
-        return image, noisy_label
-
-    def __len__(self):
-        return len(self.clean_labels)
 
 
 def selected_loader(train_loader, indices):
@@ -386,204 +181,82 @@ def load_datasets(
     noise_ratio,
     noise_classes,
     seed,
-    need_original=False,
 ):
+    noise_ind = None
     if dataset_name == "mnist":
-        train_transform = transforms.Compose(
-            [
-                transforms.ToTensor(),
-            ]
-        )
-        test_transform = transforms.Compose(
-            [
-                transforms.ToTensor(),
-            ]
-        )
-    elif dataset_name.startswith("cifar") or dataset_name.startswith("deepmind"):
-        train_transform = transforms.Compose(
-            [
-                transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                ),
-            ]
-        )
-        test_transform = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                ),
-            ]
-        )
-    elif dataset_name == "tiny-imagenet":
-        train_transform = transforms.Compose(
-            [
-                transforms.RandomResizedCrop(56),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    [0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]
-                ),
-            ]
-        )
-        test_transform = transforms.Compose(
-            [
-                transforms.Resize(64),
-                transforms.CenterCrop(56),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    [0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]
-                ),
-            ]
-        )
-    elif dataset_name == "clothing1m":
-        train_transform = transforms.Compose(
-            [
-                transforms.Resize((256, 256)),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ]
-        )
-        test_transform = transforms.Compose(
-            [
-                transforms.Resize((256, 256)),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ]
-        )
-    else:
-        raise NameError("Invalid dataset name")
-
-    if dataset_name == "mnist":
-        train_dataset = datasets.MNIST(root=root, download=True, train=True)
-        test_dataset = datasets.MNIST(
-            root=root, download=True, train=False, transform=test_transform
-        )
+        from datasets.mnist import get_mnist
+        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_mnist(root)
     elif dataset_name == "cifar10":
-        train_dataset = datasets.CIFAR10(root=root, download=True, train=True)
-        test_dataset = datasets.CIFAR10(
-            root=root, download=True, train=False, transform=test_transform
-        )
+        from datasets.cifar10 import get_cifar10
+        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_cifar10(root)
     elif dataset_name == "cifar100":
-        train_dataset = datasets.CIFAR100(root=root, download=True, train=True)
-        test_dataset = datasets.CIFAR100(
-            root=root, download=True, train=False, transform=test_transform
-        )
-    elif dataset_name == "tiny-imagenet":
-        train_dataset = TinyImageNet(root=root, mode="train")
-        test_dataset = TinyImageNet(root=root, mode="test", transform=test_transform)
-    elif dataset_name == "clothing1m":
-        train_dataset = Clothing1M(root=root, mode="train", transform=train_transform)
-        test_dataset = Clothing1M(root=root, mode="test", transform=test_transform)
-        valid_dataset = Clothing1M(root=root, mode="valid", transform=test_transform)
-        return (
-            DatasetWithIndex(train_dataset),
-            valid_dataset,
-            test_dataset,
-            [],
-        )
-    elif dataset_name.statswith("deepmind"):
-        if noise_ratio <= 0.2:
-            noise_level = "low"
-        elif noise_ratio < 0.8:
-            noise_level = "medium"
-        else:
-            noise_level = "high"
-        if dataset_name == "cifar10":
-            train_dataset = DeepMind(
-                root=root,
-                task_name="cifar10",
-                noise_level=noise_level,
-                mode="train",
-                transform=train_transform,
-            )
-            valid_dataset = DeepMind(
-                root=root,
-                task_name="cifar10",
-                noise_level=noise_level,
-                mode="valid",
-                transform=test_transform,
-            )
-            test_dataset = datasets.CIFAR10(
-                root=root, download=True, train=False, transform=test_transform
-            )
-        elif dataset_name == "cifar100":
-            train_dataset = DeepMind(
-                root=root,
-                task_name="cifar100",
-                noise_level=noise_level,
-                mode="train",
-                transform=train_transform,
-            )
-            valid_dataset = DeepMind(
-                root=root,
-                task_name="cifar100",
-                noise_level=noise_level,
-                mode="valid",
-                transform=test_transform,
-            )
-            test_dataset = datasets.CIFAR100(
-                root=root, download=True, train=False, transform=test_transform
-            )
+        from datasets.cifar100 import get_cifar100
+        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_cifar100(root)
+    elif dataset_name == "deepmind-cifar10":
+        from datasets.deepmind import get_cifar10
+        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_cifar10(root, noise_level="low")
         noise_ind = np.where(
             np.array(train_dataset.clean_labels) != np.array(train_dataset.noisy_labels)
         )[0]
-        return (
-            DatasetWithIndex(train_dataset),
-            valid_dataset,
-            test_dataset,
-            noise_ind,
-        )
+    elif dataset_name == "deepmind-cifar100":
+        from datasets.deepmind import get_cifar100
+        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_cifar100(root, noise_level="low")
+        noise_ind = np.where(
+            np.array(train_dataset.clean_labels) != np.array(train_dataset.noisy_labels)
+        )[0]
+    elif dataset_name == "tiny-imagenet":
+        from datasets.tinyimagenet import get_tinyimagenet
+        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_tinyimagenet(root)
+    elif dataset_name == "clothing1m":
+        from datasets.clothing1m import get_clothing1m
+        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_clothing1m(root)
+        noise_ind = []
     else:
-        raise NameError("Invalid dataset name")
+        raise NameError(f"Invalid dataset name: {dataset_name}")
 
     sub_dir = os.path.join("./data", f"changed_{dataset_name}_{seed}")
     os.makedirs(sub_dir, exist_ok=True)
 
-    if len(noise_classes) > 0:
-        noise_train_label_path = os.path.join(
-            sub_dir,
-            f"{noise_type}_{noise_classes}_train_label.npy",
-        )
-        noise_test_ind_path = os.path.join(
-            sub_dir,
-            f"{noise_type}_{noise_classes}_test_ind.npy",
-        )
-        noise_ind_path = os.path.join(
-            sub_dir,
-            f"{noise_type}_{noise_classes}_ind.npy",
-        )
-        train_dataset, test_subdataset, noise_ind = delete_class(
-            noise_classes,
-            train_dataset,
-            test_dataset,
-            noise_train_label_path,
-            noise_test_ind_path,
-            noise_ind_path,
-        )
+    if noise_ind is None:
+        if len(noise_classes) > 0:
+            noise_train_label_path = os.path.join(
+                sub_dir,
+                f"{noise_type}_{noise_classes}_train_label.npy",
+            )
+            noise_test_ind_path = os.path.join(
+                sub_dir,
+                f"{noise_type}_{noise_classes}_test_ind.npy",
+            )
+            noise_ind_path = os.path.join(
+                sub_dir,
+                f"{noise_type}_{noise_classes}_ind.npy",
+            )
+            train_dataset, test_subdataset, noise_ind = delete_class(
+                noise_classes,
+                train_dataset,
+                test_dataset,
+                noise_train_label_path,
+                noise_test_ind_path,
+                noise_ind_path,
+            )
+        elif noise_type in ["symmetric", "asymmetric"]:
+            noise_label_path = os.path.join(
+                sub_dir, f"{noise_type}_{noise_ratio}_label.npy"
+            )
+            noise_ind_path = os.path.join(sub_dir, f"{noise_type}_{noise_ratio}_ind.npy")
+            train_dataset, noise_ind = flip_label(
+                dataset_name,
+                noise_ratio,
+                noise_type,
+                train_dataset,
+                noise_label_path,
+                noise_ind_path,
+            )
+            test_subdataset = test_dataset
+        else:
+            raise NameError(f"Invalid noisy type: {noise_type}")
 
-    elif noise_type in ["symmetric", "asymmetric"]:
-        noise_label_path = os.path.join(
-            sub_dir, f"{noise_type}_{noise_ratio}_label.npy"
-        )
-        noise_ind_path = os.path.join(sub_dir, f"{noise_type}_{noise_ratio}_ind.npy")
-        original_labels = np.array(train_dataset.targets).copy()
-        train_dataset, noise_ind = flip_label(
-            dataset_name,
-            noise_ratio,
-            noise_type,
-            train_dataset,
-            noise_label_path,
-            noise_ind_path,
-        )
-        test_subdataset = test_dataset
-
-    if train_ratio < 1:
+    if train_ratio < 1 and valid_dataset is None:
         train_subset_path = os.path.join(sub_dir, f"{train_ratio}_train_subset.npy")
         valid_subset_path = os.path.join(sub_dir, f"{train_ratio}_valid_subset.npy")
         train_subset, valid_subset, train_noise_ind = divide_train(
@@ -593,28 +266,18 @@ def load_datasets(
     else:
         train_subset = train_dataset
         train_noise_ind = noise_ind
-        valid_subdataset = None
+        valid_subdataset = valid_dataset
 
     train_subdataset = DatasetWithIndex(
         DatasetFromSubset(train_subset, train_transform)
     )
 
-    if need_original:
-        return (
-            train_subdataset,
-            valid_subdataset,
-            test_subdataset,
-            train_noise_ind,
-            original_labels,
-        )
-    else:
-        return (
-            train_subdataset,
-            valid_subdataset,
-            test_subdataset,
-            train_noise_ind,
-        )
-
+    return (
+        train_subdataset,
+        valid_subdataset,
+        test_subdataset,
+        train_noise_ind,
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

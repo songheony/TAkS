@@ -1,157 +1,208 @@
-"""preactresnet in pytorch
+from __future__ import absolute_import
 
-[1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+'''Resnet for cifar dataset.
+Ported form
+https://github.com/facebook/fb.resnet.torch
+and
+https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
+(c) YANG, Wei
 
-    Identity Mappings in Deep Residual Networks
-    https://arxiv.org/abs/1603.05027
-"""
-
+code from https://github.com/HobbitLong/RepDistiller/blob/master/models/resnet.py
+'''
 import torch.nn as nn
 import torch.nn.functional as F
 
+__all__ = ['resnet']
 
-class PreActBasic(nn.Module):
 
+def conv3x3(in_planes, out_planes, stride=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=1, bias=False)
+
+
+class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_channels, out_channels, stride):
-        super().__init__()
-        self.residual = nn.Sequential(
-            nn.BatchNorm2d(in_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(
-                in_channels, out_channels, kernel_size=3, stride=stride, padding=1
-            ),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(
-                out_channels,
-                out_channels * PreActBasic.expansion,
-                kernel_size=3,
-                padding=1,
-            ),
-        )
-
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_channels != out_channels * PreActBasic.expansion:
-            self.shortcut = nn.Conv2d(
-                in_channels, out_channels * PreActBasic.expansion, 1, stride=stride
-            )
+    def __init__(self, inplanes, planes, stride=1, downsample=None, is_last=False):
+        super(BasicBlock, self).__init__()
+        self.is_last = is_last
+        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(planes, planes)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.downsample = downsample
+        self.stride = stride
 
     def forward(self, x):
+        residual = x
 
-        res = self.residual(x)
-        shortcut = self.shortcut(x)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
 
-        return res + shortcut
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        preact = out
+        out = F.relu(out)
+        if self.is_last:
+            return out, preact
+        else:
+            return out
 
 
-class PreActBottleNeck(nn.Module):
-
+class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, in_channels, out_channels, stride):
-        super().__init__()
-
-        self.residual = nn.Sequential(
-            nn.BatchNorm2d(in_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels, out_channels, 1, stride=stride),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, 3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels * PreActBottleNeck.expansion, 1),
-        )
-
-        self.shortcut = nn.Sequential()
-
-        if stride != 1 or in_channels != out_channels * PreActBottleNeck.expansion:
-            self.shortcut = nn.Conv2d(
-                in_channels, out_channels * PreActBottleNeck.expansion, 1, stride=stride
-            )
+    def __init__(self, inplanes, planes, stride=1, downsample=None, is_last=False):
+        super(Bottleneck, self).__init__()
+        self.is_last = is_last
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
+                               padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(planes * 4)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
 
     def forward(self, x):
+        residual = x
 
-        res = self.residual(x)
-        shortcut = self.shortcut(x)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
 
-        return res + shortcut
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        preact = out
+        out = F.relu(out)
+        if self.is_last:
+            return out, preact
+        else:
+            return out
 
 
-class PreActResNet(nn.Module):
-    def __init__(self, block, num_block, grayscale=False, class_num=100):
-        super().__init__()
-        self.input_channels = 64
+class ResNet(nn.Module):
+
+    def __init__(self, depth, num_filters, block_name='BasicBlock', grayscale=False, num_classes=10):
+        super(ResNet, self).__init__()
 
         image_channel = 1 if grayscale else 3
-        self.pre = nn.Sequential(
-            nn.Conv2d(image_channel, 64, 3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-        )
+        # Model type specifies number of layers for CIFAR-10 model
+        if block_name.lower() == 'basicblock':
+            assert (depth - 2) % 6 == 0, 'When use basicblock, depth should be 6n+2, e.g. 20, 32, 44, 56, 110, 1202'
+            n = (depth - 2) // 6
+            block = BasicBlock
+        elif block_name.lower() == 'bottleneck':
+            assert (depth - 2) % 9 == 0, 'When use bottleneck, depth should be 9n+2, e.g. 20, 29, 47, 56, 110, 1199'
+            n = (depth - 2) // 9
+            block = Bottleneck
+        else:
+            raise ValueError('block_name shoule be Basicblock or Bottleneck')
 
-        self.stage1 = self._make_layers(block, num_block[0], 64, 1)
-        self.stage2 = self._make_layers(block, num_block[1], 128, 2)
-        self.stage3 = self._make_layers(block, num_block[2], 256, 2)
-        self.stage4 = self._make_layers(block, num_block[3], 512, 2)
+        self.inplanes = num_filters[0]
+        self.conv1 = nn.Conv2d(image_channel, num_filters[0], kernel_size=3, padding=1,
+                               bias=False)
+        self.bn1 = nn.BatchNorm2d(num_filters[0])
+        self.relu = nn.ReLU(inplace=True)
+        self.layer1 = self._make_layer(block, num_filters[1], n)
+        self.layer2 = self._make_layer(block, num_filters[2], n, stride=2)
+        self.layer3 = self._make_layer(block, num_filters[3], n, stride=2)
+        self.avgpool = nn.AvgPool2d(8)
+        self.fc = nn.Linear(num_filters[3] * block.expansion, num_classes)
 
-        self.linear = nn.Linear(self.input_channels, class_num)
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
-    def _make_layers(self, block, block_num, out_channels, stride):
-        layers = []
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion),
+            )
 
-        layers.append(block(self.input_channels, out_channels, stride))
-        self.input_channels = out_channels * block.expansion
-
-        while block_num - 1:
-            layers.append(block(self.input_channels, out_channels, 1))
-            self.input_channels = out_channels * block.expansion
-            block_num -= 1
+        layers = list([])
+        layers.append(block(self.inplanes, planes, stride, downsample, is_last=(blocks == 1)))
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes, is_last=(i == blocks-1)))
 
         return nn.Sequential(*layers)
 
-    def forward(self, x):
-        x = self.pre(x)
+    def get_feat_modules(self):
+        feat_m = nn.ModuleList([])
+        feat_m.append(self.conv1)
+        feat_m.append(self.bn1)
+        feat_m.append(self.relu)
+        feat_m.append(self.layer1)
+        feat_m.append(self.layer2)
+        feat_m.append(self.layer3)
+        return feat_m
 
-        x = self.stage1(x)
-        x = self.stage2(x)
-        x = self.stage3(x)
-        x = self.stage4(x)
+    def get_bn_before_relu(self):
+        if isinstance(self.layer1[0], Bottleneck):
+            bn1 = self.layer1[-1].bn3
+            bn2 = self.layer2[-1].bn3
+            bn3 = self.layer3[-1].bn3
+        elif isinstance(self.layer1[0], BasicBlock):
+            bn1 = self.layer1[-1].bn2
+            bn2 = self.layer2[-1].bn2
+            bn3 = self.layer3[-1].bn2
+        else:
+            raise NotImplementedError('ResNet unknown block error !!!')
 
-        x = F.adaptive_avg_pool2d(x, 1)
+        return [bn1, bn2, bn3]
+
+    def forward(self, x, is_feat=False, preact=True):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)  # 32x32
+        f0 = x
+
+        x, f1_pre = self.layer1(x)  # 32x32
+        f1 = x
+        x, f2_pre = self.layer2(x)  # 16x16
+        f2 = x
+        x, f3_pre = self.layer3(x)  # 8x8
+        f3 = x
+
+        x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x = self.linear(x)
+        f4 = x
+        x = self.fc(x)
 
-        return x
-
-
-def preactresnet18(grayscale=False, num_classes=100):
-    return PreActResNet(
-        PreActBasic, [2, 2, 2, 2], grayscale=grayscale, class_num=num_classes
-    )
-
-
-def preactresnet34(grayscale=False, num_classes=100):
-    return PreActResNet(
-        PreActBasic, [3, 4, 6, 3], grayscale=grayscale, class_num=num_classes
-    )
+        if is_feat:
+            if preact:
+                return [f0, f1_pre, f2_pre, f3_pre, f4], x
+            else:
+                return [f0, f1, f2, f3, f4], x
+        else:
+            return x
 
 
-def preactresnet50(grayscale=False, num_classes=100):
-    return PreActResNet(
-        PreActBottleNeck, [3, 4, 6, 3], grayscale=grayscale, class_num=num_classes
-    )
-
-
-def preactresnet101(grayscale=False, num_classes=100):
-    return PreActResNet(
-        PreActBottleNeck, [3, 4, 23, 3], grayscale=grayscale, class_num=num_classes
-    )
-
-
-def preactresnet152(grayscale=False, num_classes=100):
-    return PreActResNet(
-        PreActBottleNeck, [3, 8, 36, 3], grayscale=grayscale, class_num=num_classes
-    )
+def preactresnet56(grayscale=False, num_classes=100):
+    return ResNet(56, [16, 16, 32, 64], 'basicblock', grayscale=grayscale, num_classes=num_classes)

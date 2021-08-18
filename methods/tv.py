@@ -30,7 +30,7 @@ class TV:
         self._config()
 
     def _config(self):
-        num_iter_total = len(self.train_dataloader) * (self.epochs - 1)
+        num_iter_total = len(self.train_dataloader) * self.epochs
         num_iter_warmup = len(self.train_dataloader) * 10
         num_classes = len(self.train_dataloader.dataset.classes)
 

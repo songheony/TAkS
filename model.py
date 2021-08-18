@@ -12,11 +12,13 @@ import models.mobilenetv2 as mobilenetv2
 import models.nasnet as nasnet
 import models.preactresnet as preactresnet
 import models.resnet as resnet
+import models.resnet26 as resnet26
 import models.resnext as resnext
 import models.rir as rir
 import models.senet as senet
 import models.shufflenet as shufflenet
 import models.shufflenetv2 as shufflenetv2
+import models.small as small
 import models.squeezenet as squeezenet
 import models.vgg as vgg
 import models.xception as xception
@@ -61,6 +63,8 @@ def get_model(model_name, dataset_name, device):
         model = getattr(nasnet, model_name)
     elif model_name.startswith("preactresnet"):
         model = getattr(preactresnet, model_name)
+    elif model_name.startswith("resnet26"):
+        model = getattr(resnet26, model_name)
     elif model_name.startswith("resnet"):
         model = getattr(resnet, model_name)
     elif model_name.startswith("resnext"):
@@ -73,6 +77,8 @@ def get_model(model_name, dataset_name, device):
         model = getattr(shufflenetv2, model_name)
     elif model_name.startswith("shufflenet"):
         model = getattr(shufflenet, model_name)
+    elif model_name.startswith("small"):
+        model = getattr(small, model_name)
     elif model_name.startswith("squeezenet"):
         model = getattr(squeezenet, model_name)
     elif model_name.startswith("vgg"):
