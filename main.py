@@ -245,7 +245,7 @@ def run(
 
             if best_valid_top1s[i] <= valid_top1:
                 best_valid_top1s[i] = valid_top1
-                best_epochs[i] = epoch - 1
+                best_epochs[i] = epoch
                 save_path = os.path.join(writers[i].log_dir, "best_model.pt")
                 torch.save(models[i].state_dict(), save_path)
 
@@ -507,22 +507,23 @@ if __name__ == "__main__":
     )
     writer.close()
 
-    metrics.insert(
-        0,
-        {
-            "epoch": 0,
-            "train_loss": 0,
-            "train_top1": 0,
-            "train_top5": 0,
-            "valid_loss": 0,
-            "valid_top1": 0,
-            "valid_top5": 0,
-            "test_loss": 0,
-            "test_top1": 0,
-            "test_top5": 0,
-            "epoch_time": preprocessing_time,
-        },
-    )
+    for model_metrics in metrics:
+        model_metrics.insert(
+            0,
+            {
+                "epoch": 0,
+                "train_loss": 0,
+                "train_top1": 0,
+                "train_top5": 0,
+                "valid_loss": 0,
+                "valid_top1": 0,
+                "valid_top5": 0,
+                "test_loss": 0,
+                "test_top1": 0,
+                "test_top5": 0,
+                "epoch_time": preprocessing_time,
+            },
+        )
 
     for i in range(len(models)):
         metric_path = os.path.join(writers[i].log_dir, "metric.csv")
