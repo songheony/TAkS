@@ -288,27 +288,31 @@ if __name__ == "__main__":
     if args.dataset_name == "mnist":
         epochs = 30
         batch_size = 128
-        model_name = "lenet5"
+        model_name = "lenet"
         step_size = 5
         gamma = 0.1
+        weight_decay = 1e-4
     elif args.dataset_name in ["cifar10", "deepmind-cifar10"]:
         epochs = 200
         batch_size = 512
         model_name = "resnet26"
         step_size = 40
         gamma = 0.1
+        weight_decay = 1e-5
     elif args.dataset_name in ["cifar100", "deepmind-cifar100", "tiny-imagenet"]:
         epochs = 120
         batch_size = 512
         model_name = "preactresnet56"
         step_size = 40
         gamma = 0.1
+        weight_decay = 1e-5
     elif args.dataset_name == "clothing1m":
         epochs = 10
         batch_size = 32
         model_name = "resnet50"
         step_size = 5
         gamma = 0.1
+        weight_decay = 1e-5
 
     learning_rate = 0.001
 
@@ -352,6 +356,7 @@ if __name__ == "__main__":
         dataset_log_dir += f"-Train({args.noise_ratio * 100}%)"
 
     criterion = nn.CrossEntropyLoss()
+    start_time = time.time()
     if args.method_name == "standard":
         from methods.standard import Standard
 
@@ -443,6 +448,8 @@ if __name__ == "__main__":
     else:
         raise NameError(f"Invalid method_name: {args.method_name}")
 
+    preprocessing_time = time.time() - start_time
+
     models = []
     for i in range(method.num_models):
         model = get_model(model_name, args.dataset_name, device)
@@ -454,13 +461,13 @@ if __name__ == "__main__":
         parameters = []
         for i in range(method.num_models):
             parameters += list(models[i].parameters())
-        optimizer = torch.optim.Adam(parameters, lr=learning_rate)
+        optimizer = torch.optim.Adam(parameters, lr=learning_rate, weight_decay=weight_decay)
         optimizers.append(optimizer)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size, gamma)
         schedulers.append(scheduler)
     else:
         for i in range(method.num_models):
-            optimizer = torch.optim.Adam(models[i].parameters(), lr=learning_rate)
+            optimizer = torch.optim.Adam(models[i].parameters(), lr=learning_rate, weight_decay=weight_decay)
             optimizers.append(optimizer)
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size, gamma)
             schedulers.append(scheduler)
@@ -499,6 +506,23 @@ if __name__ == "__main__":
         train_noise_ind,
     )
     writer.close()
+
+    metrics.insert(
+        0,
+        {
+            "epoch": 0,
+            "train_loss": 0,
+            "train_top1": 0,
+            "train_top5": 0,
+            "valid_loss": 0,
+            "valid_top1": 0,
+            "valid_top5": 0,
+            "test_loss": 0,
+            "test_top1": 0,
+            "test_top5": 0,
+            "epoch_time": preprocessing_time,
+        },
+    )
 
     for i in range(len(models)):
         metric_path = os.path.join(writers[i].log_dir, "metric.csv")
