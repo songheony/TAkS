@@ -43,7 +43,7 @@ def class2simi(transition_matrix):
 
 
 def prepare_task_target(target):
-    train_target = SubClass2Simi(target, mode='hinge')
+    train_target = SubClass2Simi(target, mode="hinge")
     eval_target = target
     return train_target.detach(), eval_target.detach()  # Make sure no gradients
 
@@ -150,7 +150,7 @@ class Class2Simi:
 class forward_MCL(nn.Module):
     # Forward Meta Classification Likelihood (MCL)
 
-    eps = 1e-12 # Avoid calculating log(0). Use the small value of float16.
+    eps = 1e-12  # Avoid calculating log(0). Use the small value of float16.
 
     def __init__(self):
         super(forward_MCL, self).__init__()
@@ -164,10 +164,11 @@ class forward_MCL(nn.Module):
         negLog_P = -P.add_(forward_MCL.eps).log_()
         return negLog_P.mean()
 
+
 class reweight_MCL(nn.Module):
     # Reweight Meta Classification Likelihood (MCL)
 
-    eps = 1e-12 # Avoid calculating log(0). Use the small value of float16.
+    eps = 1e-12  # Avoid calculating log(0). Use the small value of float16.
 
     def __init__(self):
         super(reweight_MCL, self).__init__()
@@ -177,9 +178,13 @@ class reweight_MCL(nn.Module):
         cleanP1 = prob1.mul(prob2)
         cleanP1 = cleanP1.sum(1)
         noiseP1 = cleanP1 * q[0][0] + (1 - cleanP1) * q[1][0]
-        coef1 = cleanP1.div(noiseP1)         # coefficient for instance with \hat{Y} = 1
-        coef0 = (1 - cleanP1).div(1 - noiseP1)      # coefficient for instance with \hat{Y} = 0
-        coef0[s_label == 1] = coef1[s_label == 1]       # denote the both coefficient by coef0
+        coef1 = cleanP1.div(noiseP1)  # coefficient for instance with \hat{Y} = 1
+        coef0 = (1 - cleanP1).div(
+            1 - noiseP1
+        )  # coefficient for instance with \hat{Y} = 0
+        coef0[s_label == 1] = coef1[
+            s_label == 1
+        ]  # denote the both coefficient by coef0
         coef0 = Variable(coef0, requires_grad=True)
         cleanP1.mul_(s_label).add_(s_label.eq(-1).type_as(cleanP1))
         cleanP1 = cleanP1.mul(coef0)
@@ -187,32 +192,32 @@ class reweight_MCL(nn.Module):
         return negLog_P.mean()
 
 
-def PairEnum(x,mask=None):
+def PairEnum(x, mask=None):
     # Enumerate all pairs of feature in x
-    assert x.ndimension() == 2, 'Input dimension must be 2'
-    x1 = x.repeat(x.size(0),1)
-    x2 = x.repeat(1,x.size(0)).view(-1,x.size(1))
+    assert x.ndimension() == 2, "Input dimension must be 2"
+    x1 = x.repeat(x.size(0), 1)
+    x2 = x.repeat(1, x.size(0)).view(-1, x.size(1))
     if mask is not None:
-        xmask = mask.view(-1,1).repeat(1,x.size(1))
-        #dim 0: #sample, dim 1:#feature 
-        x1 = x1[xmask].view(-1,x.size(1))
-        x2 = x2[xmask].view(-1,x.size(1))
-    return x1,x2
+        xmask = mask.view(-1, 1).repeat(1, x.size(1))
+        # dim 0: #sample, dim 1:#feature
+        x1 = x1[xmask].view(-1, x.size(1))
+        x2 = x2[xmask].view(-1, x.size(1))
+    return x1, x2
 
 
-def SubClass2Simi(x, mode='cls',mask=None):
+def SubClass2Simi(x, mode="cls", mask=None):
     # Convert class label to pairwise similarity
-    n=x.nelement()
-    assert (n-x.ndimension()+1) == n,'Dimension of Label is not right'
-    expand1 = x.view(-1,1).expand(n,n)
-    expand2 = x.view(1,-1).expand(n,n)
-    out = expand1 - expand2    
-    out[out!=0] = -1 #dissimilar pair: label=-1
-    out[out==0] = 1 #Similar pair: label=1
-    if mode=='cls':
-        out[out==-1] = 0 #dissimilar pair: label=0
-    if mode=='hinge':
-        out = out.float() #hingeloss require float type
+    n = x.nelement()
+    assert (n - x.ndimension() + 1) == n, "Dimension of Label is not right"
+    expand1 = x.view(-1, 1).expand(n, n)
+    expand2 = x.view(1, -1).expand(n, n)
+    out = expand1 - expand2
+    out[out != 0] = -1  # dissimilar pair: label=-1
+    out[out == 0] = 1  # Similar pair: label=1
+    if mode == "cls":
+        out[out == -1] = 0  # dissimilar pair: label=0
+    if mode == "hinge":
+        out = out.float()  # hingeloss require float type
     if mask is None:
         out = out.view(-1)
     else:
