@@ -53,12 +53,12 @@ def get_alpha_beta(batch_size, shake_config, device):
 
 def initialize_weights(module):
     if isinstance(module, nn.Conv2d):
-        nn.init.kaiming_normal_(module.weight.data, mode='fan_out')
+        nn.init.kaiming_normal_(module.weight.data, mode="fan_out")
     elif isinstance(module, nn.BatchNorm2d):
         module.weight.data.fill_(1)
         module.bias.data.zero_()
-    #elif isinstance(module, nn.Linear):
-        #module.bias.data.zero_()
+    # elif isinstance(module, nn.Linear):
+    # module.bias.data.zero_()
 
 
 class ResidualPath(nn.Module):
@@ -74,12 +74,9 @@ class ResidualPath(nn.Module):
             bias=False,
         )
         self.bn1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(out_channels,
-                               out_channels,
-                               kernel_size=3,
-                               stride=1,
-                               padding=1,
-                               bias=False)
+        self.conv2 = nn.Conv2d(
+            out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
@@ -92,18 +89,22 @@ class ResidualPath(nn.Module):
 class SkipConnection(nn.Module):
     def __init__(self, in_channels, out_channels, stride):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels,
-                               out_channels // 2,
-                               kernel_size=1,
-                               stride=1,
-                               padding=0,
-                               bias=False)
-        self.conv2 = nn.Conv2d(in_channels,
-                               out_channels // 2,
-                               kernel_size=1,
-                               stride=1,
-                               padding=0,
-                               bias=False)
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            out_channels // 2,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=False,
+        )
+        self.conv2 = nn.Conv2d(
+            in_channels,
+            out_channels // 2,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=False,
+        )
         self.bn = nn.BatchNorm2d(out_channels)
         self.stride = stride
 
@@ -134,7 +135,8 @@ class BasicBlock(nn.Module):
         self.shortcut = nn.Sequential()
         if in_channels != out_channels:
             self.shortcut.add_module(
-                'skip', SkipConnection(in_channels, out_channels, stride))
+                "skip", SkipConnection(in_channels, out_channels, stride)
+            )
 
     def forward(self, x):
         x1 = self.residual_path1(x)
@@ -167,34 +169,26 @@ class ResNet26(nn.Module):
 
         n_channels = [base_channels, base_channels * 2, base_channels * 4]
 
-        self.conv = nn.Conv2d(input_shape[1],
-                              16,
-                              kernel_size=3,
-                              stride=1,
-                              padding=1,
-                              bias=False)
+        self.conv = nn.Conv2d(
+            input_shape[1], 16, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.bn = nn.BatchNorm2d(16)
 
-        self.stage1 = self._make_stage(16,
-                                       n_channels[0],
-                                       n_blocks_per_stage,
-                                       block,
-                                       stride=1)
-        self.stage2 = self._make_stage(n_channels[0],
-                                       n_channels[1],
-                                       n_blocks_per_stage,
-                                       block,
-                                       stride=2)
-        self.stage3 = self._make_stage(n_channels[1],
-                                       n_channels[2],
-                                       n_blocks_per_stage,
-                                       block,
-                                       stride=2)
+        self.stage1 = self._make_stage(
+            16, n_channels[0], n_blocks_per_stage, block, stride=1
+        )
+        self.stage2 = self._make_stage(
+            n_channels[0], n_channels[1], n_blocks_per_stage, block, stride=2
+        )
+        self.stage3 = self._make_stage(
+            n_channels[1], n_channels[2], n_blocks_per_stage, block, stride=2
+        )
         self.T_revision = nn.Linear(2, 2, False)
         # compute conv feature size
         with torch.no_grad():
-            self.feature_size = self._forward_conv(
-                torch.zeros(*input_shape)).view(-1).shape[0]
+            self.feature_size = (
+                self._forward_conv(torch.zeros(*input_shape)).view(-1).shape[0]
+            )
 
         self.fc = nn.Linear(self.feature_size, num_classes)
 
@@ -204,21 +198,27 @@ class ResNet26(nn.Module):
     def _make_stage(self, in_channels, out_channels, n_blocks, block, stride):
         stage = nn.Sequential()
         for index in range(n_blocks):
-            block_name = 'block{}'.format(index + 1)
+            block_name = "block{}".format(index + 1)
             if index == 0:
                 stage.add_module(
                     block_name,
-                    block(in_channels,
-                          out_channels,
-                          stride=stride,
-                          shake_config=self.shake_config))
+                    block(
+                        in_channels,
+                        out_channels,
+                        stride=stride,
+                        shake_config=self.shake_config,
+                    ),
+                )
             else:
                 stage.add_module(
                     block_name,
-                    block(out_channels,
-                          out_channels,
-                          stride=1,
-                          shake_config=self.shake_config))
+                    block(
+                        out_channels,
+                        out_channels,
+                        stride=1,
+                        shake_config=self.shake_config,
+                    ),
+                )
         return stage
 
     def _forward_conv(self, x):
@@ -232,7 +232,7 @@ class ResNet26(nn.Module):
 
     def forward(self, x, revision=False):
         correction = self.T_revision.weight
-        #print(correction)
+        # print(correction)
         x = self._forward_conv(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)

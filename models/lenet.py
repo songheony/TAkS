@@ -1,46 +1,50 @@
-"""LeNet5
+"""LeNets
 
-code from https://github.com/kuangliu/pytorch-cifar
+code from https://github.com/scifancier/Class2Simi
 """
 
 
-from torch.nn import Module
 from torch import nn
 
 
-class LeNet(Module):
-    def __init__(self, grayscale=False, num_classes=10):
+class LeNet(nn.Module):
+    def __init__(self, num_classes=10, img_sz = 28, grayscale=True):
         super(LeNet, self).__init__()
         image_channel = 1 if grayscale else 3
-        self.conv1 = nn.Conv2d(image_channel, 6, 5)
-        self.relu1 = nn.ReLU()
-        self.pool1 = nn.MaxPool2d(2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.relu2 = nn.ReLU()
-        self.pool2 = nn.MaxPool2d(2)
-        self.fc1 = nn.Linear(256, 120)
-        self.relu3 = nn.ReLU()
-        self.fc2 = nn.Linear(120, 84)
-        self.relu4 = nn.ReLU()
-        self.fc3 = nn.Linear(84, num_classes)
-        self.relu5 = nn.ReLU()
+        feat_map_sz = img_sz//4
+        self.n_feat = 50 * feat_map_sz * feat_map_sz
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(image_channel, 20, 5, padding=2),
+            nn.BatchNorm2d(20),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(20, 50, 5, padding=2),
+            nn.BatchNorm2d(50),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2)
+        )
+        self.linear = nn.Sequential(
+            nn.Linear(self.n_feat, 500),
+            nn.BatchNorm1d(500),
+        )
+        self.last = nn.Linear(500, num_classes)  # Subject to be replaced dependent on task
+
+
+    def features(self, x):
+        x = self.conv(x)
+        x = self.linear(x.view(-1, self.n_feat))
+        return x
+
+    def logits(self, x):
+        x = self.last(x)
+        return x
 
     def forward(self, x):
-        y = self.conv1(x)
-        y = self.relu1(y)
-        y = self.pool1(y)
-        y = self.conv2(y)
-        y = self.relu2(y)
-        y = self.pool2(y)
-        y = y.view(y.shape[0], -1)
-        y = self.fc1(y)
-        y = self.relu3(y)
-        y = self.fc2(y)
-        y = self.relu4(y)
-        y = self.fc3(y)
-        y = self.relu5(y)
-        return y
+        x = self.features(x)
+        out = self.logits(x)
+        return out
 
 
-def lenet5(grayscale=False, num_classes=10):
+def lenet(grayscale=False, num_classes=10):
     return LeNet(grayscale=grayscale, num_classes=num_classes)

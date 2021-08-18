@@ -185,31 +185,80 @@ def load_datasets(
     noise_ind = None
     if dataset_name == "mnist":
         from datasets.mnist import get_mnist
-        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_mnist(root)
+
+        (
+            train_dataset,
+            valid_dataset,
+            test_dataset,
+            train_transform,
+            test_transform,
+        ) = get_mnist(root)
     elif dataset_name == "cifar10":
         from datasets.cifar10 import get_cifar10
-        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_cifar10(root)
+
+        (
+            train_dataset,
+            valid_dataset,
+            test_dataset,
+            train_transform,
+            test_transform,
+        ) = get_cifar10(root)
     elif dataset_name == "cifar100":
         from datasets.cifar100 import get_cifar100
-        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_cifar100(root)
+
+        (
+            train_dataset,
+            valid_dataset,
+            test_dataset,
+            train_transform,
+            test_transform,
+        ) = get_cifar100(root)
     elif dataset_name == "deepmind-cifar10":
         from datasets.deepmind import get_cifar10
-        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_cifar10(root, noise_level="low")
+
+        (
+            train_dataset,
+            valid_dataset,
+            test_dataset,
+            train_transform,
+            test_transform,
+        ) = get_cifar10(root, noise_level="low")
         noise_ind = np.where(
             np.array(train_dataset.clean_labels) != np.array(train_dataset.noisy_labels)
         )[0]
     elif dataset_name == "deepmind-cifar100":
         from datasets.deepmind import get_cifar100
-        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_cifar100(root, noise_level="low")
+
+        (
+            train_dataset,
+            valid_dataset,
+            test_dataset,
+            train_transform,
+            test_transform,
+        ) = get_cifar100(root, noise_level="low")
         noise_ind = np.where(
             np.array(train_dataset.clean_labels) != np.array(train_dataset.noisy_labels)
         )[0]
     elif dataset_name == "tiny-imagenet":
         from datasets.tinyimagenet import get_tinyimagenet
-        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_tinyimagenet(root)
+
+        (
+            train_dataset,
+            valid_dataset,
+            test_dataset,
+            train_transform,
+            test_transform,
+        ) = get_tinyimagenet(root)
     elif dataset_name == "clothing1m":
         from datasets.clothing1m import get_clothing1m
-        train_dataset, valid_dataset, test_dataset, train_transform, test_transform = get_clothing1m(root)
+
+        (
+            train_dataset,
+            valid_dataset,
+            test_dataset,
+            train_transform,
+            test_transform,
+        ) = get_clothing1m(root)
         noise_ind = []
     else:
         raise NameError(f"Invalid dataset name: {dataset_name}")
@@ -243,7 +292,9 @@ def load_datasets(
             noise_label_path = os.path.join(
                 sub_dir, f"{noise_type}_{noise_ratio}_label.npy"
             )
-            noise_ind_path = os.path.join(sub_dir, f"{noise_type}_{noise_ratio}_ind.npy")
+            noise_ind_path = os.path.join(
+                sub_dir, f"{noise_type}_{noise_ratio}_ind.npy"
+            )
             train_dataset, noise_ind = flip_label(
                 dataset_name,
                 noise_ratio,
@@ -278,6 +329,7 @@ def load_datasets(
         test_subdataset,
         train_noise_ind,
     )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

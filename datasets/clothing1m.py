@@ -43,6 +43,9 @@ class Clothing1M(Dataset):
             "Underwear",
         ]
 
+        # According to Class1Simi
+        self.classes.remove("Sweater")
+
         with open(os.path.join(self.anno_dir, self.img_list_file), "r") as f:
             lines = f.read().splitlines()
             for l in lines:
@@ -52,8 +55,16 @@ class Clothing1M(Dataset):
             lines = f.read().splitlines()
             for l in lines:
                 entry = l.split()
+                label = int(entry[1])
+
+                # According to Class2Simi
+                if label == 4:
+                    label = 2
+                elif label > 4:
+                    label = label - 1
+
                 img_path = os.path.join(self.root, entry[0])
-                self.labels[img_path] = int(entry[1])
+                self.labels[img_path] = label
 
     def __getitem__(self, index):
         img_path = self.imgs[index]

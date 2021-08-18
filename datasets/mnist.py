@@ -6,13 +6,13 @@ def get_mnist(root):
     train_transform = transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Normalize((0.1307, ),(0.3081, )),
+            transforms.Normalize((0.1307,), (0.3081,)),
         ]
     )
     test_transform = transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Normalize((0.1307, ),(0.3081, )),
+            transforms.Normalize((0.1307,), (0.3081,)),
         ]
     )
     train_dataset = datasets.MNIST(root=root, download=True, train=True)

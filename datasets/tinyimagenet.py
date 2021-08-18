@@ -70,9 +70,7 @@ def get_tinyimagenet(root):
             transforms.RandomResizedCrop(56),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(
-                [0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]
-            ),
+            transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
         ]
     )
     test_transform = transforms.Compose(
@@ -80,9 +78,7 @@ def get_tinyimagenet(root):
             transforms.Resize(64),
             transforms.CenterCrop(56),
             transforms.ToTensor(),
-            transforms.Normalize(
-                [0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]
-            ),
+            transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
         ]
     )
     train_dataset = TinyImageNet(root=root, mode="train")
