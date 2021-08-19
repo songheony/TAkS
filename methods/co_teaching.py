@@ -35,7 +35,7 @@ class Co_teaching:
         loss_2 = F.cross_entropy(y_2, target, reduction="none")
         ind_2_sorted = torch.argsort(loss_2)
 
-        remember_rate = 1 - self.rate_schedule[epoch]
+        remember_rate = 1 - self.rate_schedule[epoch - 1]
         num_remember = int(remember_rate * len(loss_1_sorted))
 
         ind_1_update = ind_1_sorted[:num_remember].cpu()

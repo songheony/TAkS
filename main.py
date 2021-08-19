@@ -281,10 +281,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    #region general setting
     seed_all(args.seed)
-
+    learning_rate = 0.001
+    criterion = nn.CrossEntropyLoss()
     device = f"cuda:{args.gpu}"
+    use_pretrained = False
+    #endregion
 
+    #region dataset-specific setting
     if args.dataset_name == "mnist":
         epochs = 30
         batch_size = 128
@@ -313,9 +318,9 @@ if __name__ == "__main__":
         step_size = 5
         gamma = 0.1
         weight_decay = 1e-5
+    #endregion
 
-    learning_rate = 0.001
-
+    #region prepare dataset
     train_dataset, valid_dataset, test_dataset, train_noise_ind = load_datasets(
         args.dataset_name,
         args.dataset_path,
@@ -353,9 +358,11 @@ if __name__ == "__main__":
             )
 
     if args.train_ratio < 1:
-        dataset_log_dir += f"-Train({args.noise_ratio * 100}%)"
+        dataset_log_dir += f"-Train({args.train_ratio * 100}%)"
+    
+    #endregion
 
-    criterion = nn.CrossEntropyLoss()
+    #region prepare methods
     start_time = time.time()
     if args.method_name == "standard":
         from methods.standard import Standard
@@ -409,6 +416,7 @@ if __name__ == "__main__":
         )
     elif args.method_name == "class2simi":
         loss_type = "forward"
+        use_pretrained = True
         from methods.class2simi import Class2Simi
 
         method = Class2Simi(
@@ -449,12 +457,30 @@ if __name__ == "__main__":
         raise NameError(f"Invalid method_name: {args.method_name}")
 
     preprocessing_time = time.time() - start_time
+    #endregion
 
+    #region prepare models
     models = []
     for i in range(method.num_models):
         model = get_model(model_name, args.dataset_name, device)
+        if use_pretrained:
+            root_log_dir = os.path.join(
+                args.log_dir,
+                dataset_log_dir,
+                model_name,
+                "Standard",
+                str(args.seed),
+            )
+            standard_path = os.path.join(
+                root_log_dir,
+                "model0",
+                "best_model.pt",
+            )
+            model.load_state_dict(torch.load(standard_path))
         models.append(model)
+    #endregion
 
+    #region prepare optimizers
     optimizers = []
     schedulers = []
     if args.method_name == "jocor":
@@ -471,7 +497,9 @@ if __name__ == "__main__":
             optimizers.append(optimizer)
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size, gamma)
             schedulers.append(scheduler)
+    #endregion
 
+    #region prepare logger
     root_log_dir = os.path.join(
         args.log_dir, dataset_log_dir, model_name, method.name, str(args.seed)
     )
@@ -490,7 +518,9 @@ if __name__ == "__main__":
         log_dir = os.path.join(root_log_dir, f"model{i}")
         writer = SummaryWriter(log_dir=log_dir)
         writers.append(writer)
+    #endregion
 
+    # run
     metrics, selected_idxs, best_epochs = run(
         method,
         train_dataloader,
@@ -507,6 +537,7 @@ if __name__ == "__main__":
     )
     writer.close()
 
+    # log preprocessing time
     for model_metrics in metrics:
         model_metrics.insert(
             0,
@@ -525,6 +556,7 @@ if __name__ == "__main__":
             },
         )
 
+    # save metrics
     for i in range(len(models)):
         metric_path = os.path.join(writers[i].log_dir, "metric.csv")
         save_metric(metrics[i], metric_path)

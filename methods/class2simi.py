@@ -42,9 +42,27 @@ def class2simi(transition_matrix):
     return simi_T
 
 
-def prepare_task_target(target):
-    train_target = SubClass2Simi(target, mode="hinge")
-    eval_target = target
+def prepare_task_target(x, mask=None):
+    mode = "hinge"
+    # Convert class label to pairwise similarity
+    n=x.nelement()
+    assert (n-x.ndimension()+1) == n,'Dimension of Label is not right'
+    expand1 = x.view(-1,1).expand(n,n)
+    expand2 = x.view(1,-1).expand(n,n)
+    out = expand1 - expand2    
+    out[out!=0] = -1 #dissimilar pair: label=-1
+    out[out==0] = 1 #Similar pair: label=1
+    if mode=='cls':
+        out[out==-1] = 0 #dissimilar pair: label=0
+    if mode=='hinge':
+        out = out.float() #hingeloss require float type
+    if mask is None:
+        out = out.view(-1)
+    else:
+        mask = mask.detach()
+        out = out[mask]
+    train_target = out.view(-1)
+    eval_target = x
     return train_target.detach(), eval_target.detach()  # Make sure no gradients
 
 
@@ -203,24 +221,3 @@ def PairEnum(x, mask=None):
         x1 = x1[xmask].view(-1, x.size(1))
         x2 = x2[xmask].view(-1, x.size(1))
     return x1, x2
-
-
-def SubClass2Simi(x, mode="cls", mask=None):
-    # Convert class label to pairwise similarity
-    n = x.nelement()
-    assert (n - x.ndimension() + 1) == n, "Dimension of Label is not right"
-    expand1 = x.view(-1, 1).expand(n, n)
-    expand2 = x.view(1, -1).expand(n, n)
-    out = expand1 - expand2
-    out[out != 0] = -1  # dissimilar pair: label=-1
-    out[out == 0] = 1  # Similar pair: label=1
-    if mode == "cls":
-        out[out == -1] = 0  # dissimilar pair: label=0
-    if mode == "hinge":
-        out = out.float()  # hingeloss require float type
-    if mask is None:
-        out = out.view(-1)
-    else:
-        mask = mask.detach()
-        out = out[mask]
-    return out

@@ -33,7 +33,7 @@ class JoCoR:
         ind_sorted = np.argsort(loss_pick.data)
         loss_sorted = loss_pick[ind_sorted]
 
-        remember_rate = 1 - self.co_teaching.rate_schedule[epoch]
+        remember_rate = 1 - self.co_teaching.rate_schedule[epoch - 1]
         num_remember = int(remember_rate * len(loss_sorted))
 
         ind_update = ind_sorted[:num_remember]
