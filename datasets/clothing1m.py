@@ -66,9 +66,12 @@ class Clothing1M(Dataset):
                 img_path = os.path.join(self.root, entry[0])
                 self.labels[img_path] = label
 
+        self.targets = [self.labels[img_path] for img_path in self.imgs]
+        self.courses = self.targets
+
     def __getitem__(self, index):
         img_path = self.imgs[index]
-        target = self.labels[img_path]
+        target = self.targets[img_path]
 
         image = Image.open(img_path).convert("RGB")
         img = self.transform(image)

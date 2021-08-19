@@ -17,7 +17,10 @@ class TAkS:
         self.lr_ratio = lr_ratio
         self.use_total = use_total
 
-        self.name = f"TAkS(K_ratio-{self.k_ratio*100}%,Lr-{self.lr_ratio})"
+        if isinstance(self.k_ratio, list):
+            self.name = f"TAkS(K_ratio-{self.k_ratio},Lr-{self.lr_ratio})"
+        else:
+            self.name = f"TAkS(K_ratio-{self.k_ratio*100}%,Lr-{self.lr_ratio})"
         self.num_models = 1
         self._config()
 
@@ -29,24 +32,53 @@ class TAkS:
             num_workers=16,
         )
 
-        n_experts = len(self.train_dataset)
-        if 0 < self.k_ratio <= 1:
+        self.coarse_indices = []
+        self.players = []
+        if isinstance(self.k_ratio, list):
+            for i, k_ratio in enumerate(self.k_ratio):
+                assert 0 < k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
+                idx = np.where(np.array(self.train_dataset.coarses) == i)[0]
+                n_experts = len(idx)
+                k = int(n_experts * k_ratio)
+                player = Player(
+                    n_experts, k, self.epochs, self.lr_ratio, use_total=self.use_total
+                )
+                self.coarse_indices.append(idx)
+                self.players.append(player)
+        else:
+            assert 0 < self.k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
+            idx = list(range(len(self.train_dataset)))
+            n_experts = len(idx)
             k = int(n_experts * self.k_ratio)
-            self.player = Player(
+            player = Player(
                 n_experts, k, self.epochs, self.lr_ratio, use_total=self.use_total
             )
-        else:
-            raise ValueError("k_ratio should be less than 1 and greater than 0")
+            self.coarse_indices.append(idx)
+            self.players.append(player)
 
     def pre_epoch_hook(self, train_dataloader):
-        indices = np.where(self.player.w)[0]
+        indices = []
+        for i, player in enumerate(self.players):
+            idx = np.where(player.w)[0]
+            coarse_idx = self.coarse_indices[i][idx]
+            indices = np.concatenate((indices, coarse_idx))
         selected_dataloader = selected_loader(train_dataloader, indices)
         return selected_dataloader
 
     def post_epoch_hook(self, model, device):
-        indices = np.where(self.player.w)[0]
         loss = calc_loss(self.fixed_train_dataloader, model, device)
-        cum_loss, objective = self.player.update(loss)
+        
+        indices = []
+        cum_losses = np.empty((len(loss)))
+        objectives = np.empty((len(loss)))
+        for i, player in enumerate(self.players):
+            idx = np.where(player.w)[0]
+            coarse_idx = self.coarse_indices[i][idx]
+            cum_loss, objective = player.update(loss[coarse_idx])
+            indices = np.concatenate((indices, coarse_idx))
+            cum_losses[coarse_idx] = cum_loss
+            objectives[coarse_idx] = objective
+
         inds_updates = [indices]
         return loss, cum_loss, objective, inds_updates
 
@@ -84,7 +116,7 @@ class Player:
         else:
             objective = loss
 
-        _, idx = torch.topk(objective, self.k)
+        _, idx = torch.topk(objective, self.k, largest=False, sorted=False)
 
         self.w[:] = False
         self.w[idx] = True

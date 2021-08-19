@@ -4,8 +4,6 @@ import numpy as np
 import torch
 from torch.utils.data.sampler import Sampler
 from torch.utils.data import random_split, DataLoader, Dataset, Subset
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
 
 from utils import seed_all
 from notify import noisify
@@ -14,7 +12,13 @@ from notify import noisify
 class DatasetWithIndex(Dataset):
     def __init__(self, dataset):
         self.dataset = dataset
-        self.classes = self.dataset.classes
+
+        if isinstance(self.dataset.subset, Subset):
+            self.classes = self.dataset.subset.dataset.classes
+            self.coarses = self.dataset.subset.dataset.coarses
+        else:
+            self.classes = self.dataset.subset.classes
+            self.coarses = self.dataset.subset.coarses
 
     def __getitem__(self, index):
         x, y = self.dataset[index]
@@ -30,11 +34,6 @@ class DatasetFromSubset(Dataset):
     def __init__(self, subset, transform=None):
         self.subset = subset
         self.transform = transform
-
-        if isinstance(self.subset, Subset):
-            self.classes = self.subset.dataset.classes
-        else:
-            self.classes = self.subset.classes
 
     def __getitem__(self, index):
         x, y = self.subset[index]

@@ -6,6 +6,8 @@ import torchvision.datasets as datasets
 
 import tensorflow as tf
 
+from datasets.cifar100 import sparse2coarse
+
 
 class DeepMind(Dataset):
     r"""https://github.com/deepmind/deepmind-research/blob/master/noisy_label"""
@@ -60,13 +62,18 @@ class DeepMind(Dataset):
         self.parsed_image_dataset = list(raw_image_dataset.map(_parse_image_function))
 
         self.clean_labels = []
-        self.noisy_labels = []
+        self.targets = []
         for index in range(len(self.parsed_image_dataset)):
             features = self.parsed_image_dataset[index]
             clean_label = features[self.clean_label_key].numpy()[0]
             noisy_label = features["noisy_labels"].numpy()[self.rater_idx]
             self.clean_labels.append(clean_label)
-            self.noisy_labels.append(noisy_label)
+            self.targets.append(noisy_label)
+
+        if task_name == "cifar10":
+            self.courses = self.targets
+        elif task_name == "cifar100":
+            self.courses = sparse2coarse(self.targets)
 
     def __getitem__(self, index):
         features = self.parsed_image_dataset[index]
@@ -74,7 +81,7 @@ class DeepMind(Dataset):
             tf.io.decode_raw(features[self.image_key], tf.uint8), (32, 32, 3)
         ).numpy()
         image = Image.fromarray(image)
-        noisy_label = self.noisy_labels[index]
+        noisy_label = self.targets[index]
 
         if self.transform is not None:
             image = self.transform(image)

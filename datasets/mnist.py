@@ -19,4 +19,5 @@ def get_mnist(root):
     test_dataset = datasets.MNIST(
         root=root, download=True, train=False, transform=test_transform
     )
+    train_dataset.coarses = train_dataset.targets
     return train_dataset, None, test_dataset, train_transform, test_transform

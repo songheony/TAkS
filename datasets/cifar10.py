@@ -21,4 +21,5 @@ def get_cifar10(root):
     test_dataset = datasets.CIFAR10(
         root=root, download=True, train=False, transform=test_transform
     )
+    train_dataset.coarses = train_dataset.targets
     return train_dataset, None, test_dataset, train_transform, test_transform
