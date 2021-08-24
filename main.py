@@ -153,7 +153,7 @@ def run(
         start_time = time.time()
 
         if hasattr(method, "pre_epoch_hook"):
-            selected_dataloader = method.pre_epoch_hook(train_dataloader)
+            loss, cum_loss, objective, inds_updates, selected_dataloader = method.pre_epoch_hook(train_dataloader, model, device)
         else:
             selected_dataloader = train_dataloader
 
@@ -165,11 +165,6 @@ def run(
             epoch,
             device,
         )
-
-        if hasattr(method, "post_epoch_hook"):
-            loss, cum_loss, objective, inds_updates = method.post_epoch_hook(
-                model, device
-            )
 
         epoch_time = time.time() - start_time
 
@@ -264,6 +259,7 @@ if __name__ == "__main__":
     parser.add_argument("--noise_type", type=str, default="symmetric")
     parser.add_argument("--noise_ratio", type=float, default=0.8)
     parser.add_argument("--noise_classes", type=list, default=[])
+    parser.add_argument('--use_pretrained', action='store_true')
 
     parser.add_argument("--method_name", type=str, default="ftl")
 
@@ -276,7 +272,6 @@ if __name__ == "__main__":
     parser.add_argument("--precision", type=float, default=0.2)
 
     # jocor
-    parser.add_argument("--forget_rate", type=float, default=0.2)
     parser.add_argument("--co_lambda", type=float, default=0.9)
 
     args = parser.parse_args()
@@ -286,7 +281,6 @@ if __name__ == "__main__":
     learning_rate = 0.001
     criterion = nn.CrossEntropyLoss()
     device = f"cuda:{args.gpu}"
-    use_pretrained = False
     #endregion
 
     #region dataset-specific setting
@@ -387,15 +381,15 @@ if __name__ == "__main__":
     elif args.method_name == "co-teaching":
         from methods.co_teaching import Co_teaching
 
-        method = Co_teaching(args.dataset_name, args.forget_rate, epochs)
+        method = Co_teaching(args.dataset_name, args.noise_ratio, epochs)
     elif args.method_name == "co-teaching+":
         from methods.co_teaching_plus import Co_teaching_plus
 
-        method = Co_teaching_plus(args.dataset_name, args.forget_rate, epochs)
+        method = Co_teaching_plus(args.dataset_name, args.noise_ratio, epochs)
     elif args.method_name == "jocor":
         from methods.jocor import JoCoR
 
-        method = JoCoR(args.dataset_name, args.forget_rate, epochs, args.co_lambda)
+        method = JoCoR(args.dataset_name, args.noise_ratio, epochs, args.co_lambda)
     elif args.method_name == "cdr":
         clip = 1 - args.noise_ratio
         from methods.cdr import CDR
@@ -416,7 +410,6 @@ if __name__ == "__main__":
         )
     elif args.method_name == "class2simi":
         loss_type = "forward"
-        use_pretrained = True
         from methods.class2simi import Class2Simi
 
         method = Class2Simi(
@@ -463,7 +456,7 @@ if __name__ == "__main__":
     models = []
     for i in range(method.num_models):
         model = get_model(model_name, args.dataset_name, device)
-        if use_pretrained:
+        if args.use_pretrained and args.method_name != "standard":
             root_log_dir = os.path.join(
                 args.log_dir,
                 dataset_log_dir,
@@ -500,8 +493,12 @@ if __name__ == "__main__":
     #endregion
 
     #region prepare logger
+    if args.method_name != "standard":
+        method_dir_name = f"{method.name}_pretrained" if args.use_pretrained else f"{method.name}_scratch"
+    else:
+        method_dir_name = method.name
     root_log_dir = os.path.join(
-        args.log_dir, dataset_log_dir, model_name, method.name, str(args.seed)
+        args.log_dir, dataset_log_dir, model_name, method_dir_name, str(args.seed)
     )
     if os.path.exists(root_log_dir):
         for i in range(len(models)):
