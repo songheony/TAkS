@@ -6,7 +6,7 @@ from torch.utils.data.sampler import Sampler
 from torch.utils.data import random_split, DataLoader, Dataset, Subset
 
 from utils import seed_all
-from notify import noisify
+from noises import noisify
 
 
 class DatasetWithIndex(Dataset):
@@ -132,6 +132,7 @@ def flip_label(
     train_dataset,
     noise_label_path,
     noise_ind_path,
+    seed,
 ):
     if os.path.exists(noise_label_path) and os.path.exists(noise_ind_path):
         train_dataset.targets = np.load(noise_label_path)
@@ -146,6 +147,7 @@ def flip_label(
             labels,
             noise_type,
             noise_ratio,
+            seed,
         )
         noisy_labels = np.array([i[0] for i in noisy_labels])
         noise_ind = np.where(np.array(train_dataset.targets) != noisy_labels)[0]
@@ -301,6 +303,7 @@ def load_datasets(
                 train_dataset,
                 noise_label_path,
                 noise_ind_path,
+                seed,
             )
             test_subdataset = test_dataset
         else:
