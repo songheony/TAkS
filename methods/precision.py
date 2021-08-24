@@ -1,8 +1,9 @@
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 
 from dataset import selected_loader
-from taks import TAkS, calc_loss
+from taks import calc_loss
 
 
 class Precision:
@@ -24,37 +25,60 @@ class Precision:
         self.precision = precision
         self.train_noise_ind = train_noise_ind
 
-        self.name = f"Precision(K_ratio-{self.k_ratio*100}%,Precision-{self.precision})"
+        assert type(self.k_ratio) == type(self.lr_ratio), "K_ratio and Lr should be same type"
+
+        if isinstance(self.k_ratio, list):
+            self.name = f"Precision(K_ratio-{self.k_ratio},Precision-{self.precision})"
+        else:
+            self.name = f"Precision(K_ratio-{self.k_ratio*100}%,Precision-{self.precision})"
         self.num_models = 1
         self._config()
 
     def _config(self):
-        self.taks = TAkS(
-            self.criterion,
+        self.fixed_train_dataloader = DataLoader(
             self.train_dataset,
-            self.batch_size,
-            self.epochs,
-            self.k_ratio,
-            0,
-            use_total=True,
+            batch_size=self.batch_size * 4,
+            shuffle=False,
+            num_workers=16,
         )
 
-        n_experts = len(self.train_dataset)
-        k = int(n_experts * self.k_ratio)
-        self.player = PrecisionSelector(
-            n_experts, k, self.precision, self.train_noise_ind
-        )
+        if isinstance(self.k_ratio, list):
+            for i, k_ratio, lr_ratio in zip(range(len(self.k_ratio)), self.k_ratio, self.lr_ratio):
+                assert 0 < k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
+                idx = np.where(np.array(self.train_dataset.coarses) == i)[0]
+                n_experts = len(idx)
+                k = int(n_experts * k_ratio)
+                player = PrecisionSelector(
+                    n_experts, k, self.precision, self.train_noise_ind
+                )
+                self.coarse_indices.append(idx)
+                self.players.append(player)
+        else:
+            assert 0 < self.k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
+            idx = list(range(len(self.train_dataset)))
+            n_experts = len(idx)
+            k = int(n_experts * self.k_ratio)
+            player = PrecisionSelector(
+                n_experts, k, self.precision, self.train_noise_ind
+            )
+            self.coarse_indices.append(idx)
+            self.players.append(player)
 
-    def pre_epoch_hook(self, train_dataloader):
-        indices = np.where(self.player.w)[0]
-        selected_dataloader = selected_loader(train_dataloader, indices)
-        return selected_dataloader
-
-    def post_epoch_hook(self, model, device, indices):
+    def pre_epoch_hook(self, train_dataloader, model, device):
         loss = calc_loss(self.fixed_train_dataloader, model, device)
-        cum_loss, objective = self.player.update(loss)
-        inds_updates = [indices]
-        return cum_loss, objective, inds_updates
+        
+        indices = []
+        cum_losses = np.empty((len(loss)))
+        objectives = np.empty((len(loss)))
+        for i, player in enumerate(self.players):
+            idx = np.where(player.w)[0]
+            coarse_idx = self.coarse_indices[i][idx]
+            cum_loss, objective = player.update(loss[coarse_idx])
+            indices = np.concatenate((indices, coarse_idx))
+            cum_losses[coarse_idx] = cum_loss
+            objectives[coarse_idx] = objective
+        selected_dataloader = selected_loader(train_dataloader, indices)
+        return loss, cum_loss, objective, [indices], selected_dataloader
 
     def loss(self, outputs, target, *args, **kwargs):
         output = outputs[0]
