@@ -265,7 +265,6 @@ if __name__ == "__main__":
 
     # ours
     parser.add_argument("--k_ratio", type=float, default=0.2)
-    parser.add_argument("--lr_ratio", type=float, default=1e-3)
     parser.add_argument("--use_total", type=bool, default=True)
 
     # precision
@@ -431,7 +430,6 @@ if __name__ == "__main__":
             batch_size,
             epochs,
             args.k_ratio,
-            args.lr_ratio,
             args.use_total,
         )
     elif args.method_name == "precision":

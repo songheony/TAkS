@@ -25,8 +25,6 @@ class Precision:
         self.precision = precision
         self.train_noise_ind = train_noise_ind
 
-        assert type(self.k_ratio) == type(self.lr_ratio), "K_ratio and Lr should be same type"
-
         if isinstance(self.k_ratio, list):
             self.name = f"Precision(K_ratio-{self.k_ratio},Precision-{self.precision})"
         else:
@@ -43,7 +41,7 @@ class Precision:
         )
 
         if isinstance(self.k_ratio, list):
-            for i, k_ratio, lr_ratio in zip(range(len(self.k_ratio)), self.k_ratio, self.lr_ratio):
+            for i, k_ratio in enumerate(self.k_ratio):
                 assert 0 < k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
                 idx = np.where(np.array(self.train_dataset.coarses) == i)[0]
                 n_experts = len(idx)

@@ -7,22 +7,20 @@ from dataset import selected_loader
 
 class TAkS:
     def __init__(
-        self, criterion, train_dataset, batch_size, epochs, k_ratio, lr_ratio, use_total
+        self, criterion, train_dataset, batch_size, epochs, k_ratio, use_total=True, use_noise=True,
     ):
         self.criterion = criterion
         self.train_dataset = train_dataset
         self.batch_size = batch_size
         self.epochs = epochs
         self.k_ratio = k_ratio
-        self.lr_ratio = lr_ratio
         self.use_total = use_total
-
-        assert type(self.k_ratio) == type(self.lr_ratio), "K_ratio and Lr should be same type"
+        self.use_noise = use_noise
 
         if isinstance(self.k_ratio, list):
-            self.name = f"TAkS(K_ratio-{self.k_ratio},Lr-{self.lr_ratio})"
+            self.name = f"TAkS(K_ratio-{self.k_ratio})"
         else:
-            self.name = f"TAkS(K_ratio-{self.k_ratio*100}%,Lr-{self.lr_ratio})"
+            self.name = f"TAkS(K_ratio-{self.k_ratio*100}%)"
         self.num_models = 1
         self._config()
 
@@ -37,13 +35,13 @@ class TAkS:
         self.coarse_indices = []
         self.players = []
         if isinstance(self.k_ratio, list):
-            for i, k_ratio, lr_ratio in zip(range(len(self.k_ratio)), self.k_ratio, self.lr_ratio):
+            for i, k_ratio in enumerate(self.k_ratio):
                 assert 0 < k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
                 idx = np.where(np.array(self.train_dataset.coarses) == i)[0]
                 n_experts = len(idx)
                 k = int(n_experts * k_ratio)
                 player = Player(
-                    n_experts, k, self.epochs, lr_ratio, use_total=self.use_total
+                    n_experts, k, self.epochs, use_total=self.use_total, use_noise=self.use_noise
                 )
                 self.coarse_indices.append(idx)
                 self.players.append(player)
@@ -53,7 +51,7 @@ class TAkS:
             n_experts = len(idx)
             k = int(n_experts * self.k_ratio)
             player = Player(
-                n_experts, k, self.epochs, self.lr_ratio, use_total=self.use_total
+                n_experts, k, self.epochs, use_total=self.use_total, use_noise=self.use_noise
             )
             self.coarse_indices.append(idx)
             self.players.append(player)
@@ -81,17 +79,17 @@ class TAkS:
 
 
 class Player:
-    def __init__(self, n_experts, k, T, lr_ratio, use_total=True):
+    def __init__(self, n_experts, k, T, use_total=True, use_noise=True):
         self.n_experts = n_experts
         self.k = k
         self.T = T
-        self.lr_ratio = lr_ratio
         self.use_total = use_total
+        self.use_noise = use_noise
 
         self.init()
 
     def init(self):
-        self.lr = np.sqrt(self.k * self.T) * self.lr_ratio
+        self.lr = np.sqrt(self.T)
         self.w = np.zeros(self.n_experts, dtype=bool)
         self.w[np.random.choice(self.n_experts, self.k, replace=False)] = True
         self.total_loss = torch.zeros(self.n_experts)
@@ -100,7 +98,7 @@ class Player:
         if self.use_total:
             self.total_loss += loss
 
-            if self.lr > 0:
+            if self.use_noise:
                 noise = np.random.randn(self.n_experts) * self.lr
                 objective = self.total_loss + noise
             else:
