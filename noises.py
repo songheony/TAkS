@@ -209,7 +209,7 @@ def noisify_rand(y_train, noise, random_state, num_classes):
     print('Actual noise %.2f' % actual_noise)
     y_train = y_train_noisy
 
-    return y_train, actual_noise, P
+    return y_train, P
 
 
 def noisify(dataset_name, nb_classes, train_labels, noise_type, noise_rate, random_state):
