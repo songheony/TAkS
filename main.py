@@ -153,7 +153,7 @@ def run(
         start_time = time.time()
 
         if hasattr(method, "pre_epoch_hook"):
-            loss, cum_loss, objective, inds_updates, selected_dataloader = method.pre_epoch_hook(train_dataloader, model, device)
+            loss, cum_loss, objective, inds_updates, selected_dataloader = method.pre_epoch_hook(train_dataloader, model)
         else:
             selected_dataloader = train_dataloader
 
@@ -266,6 +266,7 @@ if __name__ == "__main__":
     # ours
     parser.add_argument("--k_ratio", type=float, default=0.2)
     parser.add_argument("--use_total", type=bool, default=True)
+    parser.add_argument("--use_noise", type=bool, default=True)
 
     # precision
     parser.add_argument("--precision", type=float, default=0.2)
@@ -430,7 +431,9 @@ if __name__ == "__main__":
             batch_size,
             epochs,
             args.k_ratio,
+            device,
             args.use_total,
+            args.use_noise,
         )
     elif args.method_name == "precision":
         from methods.precision import Precision
