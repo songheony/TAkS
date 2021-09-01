@@ -1,4 +1,3 @@
-declare -A lr_ratios
 declare -A k_ratios
 declare -A co_lambdas
 
@@ -21,9 +20,6 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
 done
 
 # mnist
-lr_ratios[0,0]=0.005
-lr_ratios[0,1]=0.005
-lr_ratios[0,2]=0.005
 k_ratios[0,0]=0.65
 k_ratios[0,1]=0.35
 k_ratios[0,2]=0.15
@@ -32,9 +28,6 @@ co_lambdas[0,1]=0.9
 co_lambdas[0,2]=0.9
 
 # cifar10
-lr_ratios[1,0]=0.0005
-lr_ratios[1,1]=0.001
-lr_ratios[1,2]=0.005
 k_ratios[1,0]=0.75
 k_ratios[1,1]=0.45
 k_ratios[1,2]=0.2
@@ -43,9 +36,6 @@ co_lambdas[1,1]=0.9
 co_lambdas[1,2]=0.9
 
 # cifar100
-lr_ratios[2,0]=0.0005
-lr_ratios[2,1]=0.001
-lr_ratios[2,2]=0.005
 k_ratios[2,0]=0.65
 k_ratios[2,1]=0.35
 k_ratios[2,2]=0.15
@@ -61,11 +51,11 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
         python ./main.py --method_name "decouple" $common
         python ./main.py --method_name "co-teaching" $common
         python ./main.py --method_name "co-teaching+" $common
-        # python ./main.py --method_name "jocor" --co_lambda ${co_lambdas[$j,$k]} $common
+        python ./main.py --method_name "jocor" --co_lambda ${co_lambdas[$j,$k]} $common
         python ./main.py --method_name "cdr" $common
         python ./main.py --method_name "tv" $common
         python ./main.py --method_name "class2simi" $common --use_pretrained
-        # python ./main.py --method_name "taks" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} $common
+        python ./main.py --method_name "taks" --k_ratio ${k_ratios[$j,$k]} $common
     done
 done
 
@@ -81,9 +71,6 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
 done
 
 # mnist
-lr_ratios[0,0]=0.005
-lr_ratios[0,1]=0.005
-lr_ratios[0,2]=0.005
 k_ratios[0,0]=0.65
 k_ratios[0,1]=0.35
 k_ratios[0,2]=0.15
@@ -92,9 +79,6 @@ co_lambdas[0,1]=0.9
 co_lambdas[0,2]=0.9
 
 # cifar10
-lr_ratios[1,0]=0.0005
-lr_ratios[1,1]=0.001
-lr_ratios[1,2]=0.005
 k_ratios[1,0]=0.75
 k_ratios[1,1]=0.45
 k_ratios[1,2]=0.2
@@ -103,9 +87,6 @@ co_lambdas[1,1]=0.9
 co_lambdas[1,2]=0.9
 
 # cifar100
-lr_ratios[2,0]=0.0005
-lr_ratios[2,1]=0.001
-lr_ratios[2,2]=0.005
 k_ratios[2,0]=0.65
 k_ratios[2,1]=0.35
 k_ratios[2,2]=0.15
@@ -121,10 +102,10 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
         python ./main.py --method_name "decouple" $common
         python ./main.py --method_name "co-teaching" $common
         python ./main.py --method_name "co-teaching+" $common
-        # python ./main.py --method_name "jocor" --co_lambda ${co_lambdas[$j,$k]} $common
+        python ./main.py --method_name "jocor" --co_lambda ${co_lambdas[$j,$k]} $common
         python ./main.py --method_name "cdr" $common
         python ./main.py --method_name "tv" $common
         python ./main.py --method_name "class2simi" $common --use_pretrained
-        # python ./main.py --method_name "taks" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} $common
+        python ./main.py --method_name "taks" --k_ratio ${k_ratios[$j,$k]} $common
     done
 done
