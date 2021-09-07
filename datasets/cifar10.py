@@ -18,8 +18,7 @@ def get_cifar10(root):
         ]
     )
     train_dataset = datasets.CIFAR10(root=root, download=True, train=True)
-    test_dataset = datasets.CIFAR10(
-        root=root, download=True, train=False, transform=test_transform
-    )
-    train_dataset.coarses = train_dataset.targets
+    test_dataset = datasets.CIFAR10(root=root, download=True, train=False)
+    train_dataset.coarse_classes = list(range(10))
+    test_dataset.coarse_classes = list(range(10))
     return train_dataset, None, test_dataset, train_transform, test_transform

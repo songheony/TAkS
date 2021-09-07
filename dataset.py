@@ -3,46 +3,38 @@ import argparse
 import numpy as np
 import torch
 from torch.utils.data.sampler import Sampler
-from torch.utils.data import random_split, DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader, Dataset
 
 from utils import seed_all
 from noises import noisify
+from datasets.cifar100 import sparse2coarse
 
 
-class DatasetWithIndex(Dataset):
-    def __init__(self, dataset):
+class Subset(Dataset):
+    def __init__(self, dataset, indices, dataset_name, transform=None):
         self.dataset = dataset
-
-        if isinstance(self.dataset.subset, Subset):
-            self.classes = self.dataset.subset.dataset.classes
-            self.coarses = self.dataset.subset.dataset.coarses
-        else:
-            self.classes = self.dataset.subset.classes
-            self.coarses = self.dataset.subset.coarses
-
-    def __getitem__(self, index):
-        x, y = self.dataset[index]
-        return x, y, index
-
-    def __len__(self):
-        return len(self.dataset)
-
-
-class DatasetFromSubset(Dataset):
-    """https://discuss.pytorch.org/t/torch-utils-data-dataset-random-split/32209/4"""
-
-    def __init__(self, subset, transform=None):
-        self.subset = subset
+        self.indices = indices
+        self.dataset_name = dataset_name
         self.transform = transform
 
-    def __getitem__(self, index):
-        x, y = self.subset[index]
+        if self.dataset_name == "deepmind-cifar100":
+            self.coarses = np.array(self.dataset.coarses)[self.indices]
+        else:
+            self.coarses = np.array(self.dataset.targets)[self.indices]
+            if self.dataset_name == "cifar100":
+                self.coarses = sparse2coarse(self.coarses)
+
+        self.classes = self.dataset.classes
+        self.coarse_classes = self.dataset.coarse_classes
+
+    def __getitem__(self, idx):
+        x, y = self.dataset[self.indices[idx]]
         if self.transform:
             x = self.transform(x)
-        return x, y
+        return x, y, idx
 
     def __len__(self):
-        return len(self.subset)
+        return len(self.indices)
 
 
 class IndicesSampler(Sampler):
@@ -65,7 +57,7 @@ class IndicesSampler(Sampler):
         return len(self.indices)
 
 
-def selected_loader(train_loader, indices):
+def filter_loader(train_loader, indices):
     sampler = IndicesSampler(indices, True)
     selected_dataloader = DataLoader(
         train_loader.dataset,
@@ -74,55 +66,6 @@ def selected_loader(train_loader, indices):
         sampler=sampler,
     )
     return selected_dataloader
-
-
-def delete_class(
-    deleted_classes,
-    train_dataset,
-    test_dataset,
-    noise_train_label_path,
-    noise_test_ind_path,
-    noise_ind_path,
-):
-    clean_classes = [
-        i for i in range(len(train_dataset.classes)) if i not in deleted_classes
-    ]
-    train_dataset.classes = [train_dataset.classes[c] for c in clean_classes]
-    test_dataset.classes = [test_dataset.classes[c] for c in clean_classes]
-
-    if (
-        os.path.exists(noise_train_label_path)
-        and os.path.exists(noise_test_ind_path)
-        and os.path.exists(noise_ind_path)
-    ):
-        train_dataset.targets = np.load(noise_train_label_path)
-        test_ind = np.load(noise_test_ind_path)
-        test_subdataset = Subset(test_dataset, test_ind)
-        noise_ind = np.load(noise_ind_path)
-    else:
-        test_deleted_ind = None
-        noise_ind = None
-        for deleted_class in deleted_classes:
-            train_ind = np.where(train_dataset.targets == deleted_class)[0]
-            changed = np.random.choice(clean_classes, len(train_ind))
-            train_dataset.targets[train_ind] = torch.LongTensor(changed)
-            if noise_ind is None:
-                noise_ind = train_ind
-            else:
-                noise_ind = np.concatenate([noise_ind, train_ind], axis=0)
-
-            test_ind = np.where(test_dataset.targets == deleted_class)[0]
-            if test_deleted_ind is None:
-                test_deleted_ind = test_ind
-            else:
-                test_deleted_ind = np.concatenate([test_deleted_ind, test_ind], axis=0)
-        test_ind = np.setdiff1d(range(len(test_dataset.targets)), test_deleted_ind)
-        test_subdataset = Subset(test_dataset, test_ind)
-        np.save(noise_train_label_path, train_dataset.targets)
-        np.save(noise_test_ind_path, test_ind)
-        np.save(noise_ind_path, noise_ind)
-
-    return train_dataset, test_subdataset, noise_ind
 
 
 def flip_label(
@@ -159,15 +102,18 @@ def flip_label(
 
 
 def divide_train(
-    train_ratio, train_dataset, noise_ind, train_subset_path, valid_subset_path
+    train_ratio, train_dataset, noise_ind, train_subset_path, valid_subset_path, dataset_name, train_transform, test_transform
 ):
     if os.path.exists(train_subset_path) and os.path.join(valid_subset_path):
-        train_subset = Subset(train_dataset, np.load(train_subset_path))
-        valid_subset = Subset(train_dataset, np.load(valid_subset_path))
+        train_subset = Subset(train_dataset, np.load(train_subset_path), dataset_name, train_transform)
+        valid_subset = Subset(train_dataset, np.load(valid_subset_path), dataset_name, test_transform)
     else:
         train_size = int(len(train_dataset) * train_ratio)
         val_size = len(train_dataset) - train_size
-        train_subset, valid_subset = random_split(train_dataset, [train_size, val_size])
+
+        indices = randperm(train_size + val_size, generator=torch.default_generator).tolist()
+        train_subset = Subset(train_dataset, indices[:train_size], dataset_name, train_transform)
+        valid_subset = Subset(train_dataset, indices[train_size:], dataset_name, test_transform)
         np.save(train_subset_path, train_subset.indices)
         np.save(valid_subset_path, valid_subset.indices)
     train_noise_ind = np.where(np.in1d(train_subset.indices, noise_ind))[0]
@@ -180,7 +126,6 @@ def load_datasets(
     train_ratio,
     noise_type,
     noise_ratio,
-    noise_classes,
     seed,
 ):
     noise_ind = None
@@ -268,28 +213,7 @@ def load_datasets(
     os.makedirs(sub_dir, exist_ok=True)
 
     if noise_ind is None:
-        if len(noise_classes) > 0:
-            noise_train_label_path = os.path.join(
-                sub_dir,
-                f"{noise_type}_{noise_classes}_train_label.npy",
-            )
-            noise_test_ind_path = os.path.join(
-                sub_dir,
-                f"{noise_type}_{noise_classes}_test_ind.npy",
-            )
-            noise_ind_path = os.path.join(
-                sub_dir,
-                f"{noise_type}_{noise_classes}_ind.npy",
-            )
-            train_dataset, test_subdataset, noise_ind = delete_class(
-                noise_classes,
-                train_dataset,
-                test_dataset,
-                noise_train_label_path,
-                noise_test_ind_path,
-                noise_ind_path,
-            )
-        elif noise_type in ["symmetric", "asymmetric"]:
+        if noise_type in ["symmetric", "asymmetric"]:
             noise_label_path = os.path.join(
                 sub_dir, f"{noise_type}_{noise_ratio}_label.npy"
             )
@@ -305,7 +229,6 @@ def load_datasets(
                 noise_ind_path,
                 seed,
             )
-            test_subdataset = test_dataset
         else:
             raise NameError(f"Invalid noisy type: {noise_type}")
 
@@ -313,22 +236,21 @@ def load_datasets(
         train_subset_path = os.path.join(sub_dir, f"{train_ratio}_train_subset.npy")
         valid_subset_path = os.path.join(sub_dir, f"{train_ratio}_valid_subset.npy")
         train_subset, valid_subset, train_noise_ind = divide_train(
-            train_ratio, train_dataset, noise_ind, train_subset_path, valid_subset_path
+            train_ratio, train_dataset, noise_ind, train_subset_path, valid_subset_path, dataset_name, train_transform, test_transform
         )
-        valid_subdataset = DatasetFromSubset(valid_subset, test_transform)
     else:
-        train_subset = train_dataset
+        train_subset = Subset(train_dataset, list(range(len(train_dataset))), dataset_name, train_transform)
+        if valid_dataset is None:
+            valid_subset = None
+        else:
+            train_subset = Subset(valid_dataset, list(range(len(valid_dataset))), dataset_name, test_transform)
         train_noise_ind = noise_ind
-        valid_subdataset = valid_dataset
-
-    train_subdataset = DatasetWithIndex(
-        DatasetFromSubset(train_subset, train_transform)
-    )
+    test_subset = Subset(test_dataset, list(range(len(test_dataset))), dataset_name, test_transform)
 
     return (
-        train_subdataset,
-        valid_subdataset,
-        test_subdataset,
+        train_subset,
+        valid_subset,
+        test_subset,
         train_noise_ind,
     )
 
@@ -342,7 +264,6 @@ if __name__ == "__main__":
     parser.add_argument("--train_ratio", type=float, default=1.0)
     parser.add_argument("--noise_type", type=str, default="symmetric")
     parser.add_argument("--noise_ratio", type=float, default=0.2)
-    parser.add_argument("--noise_classes", type=list, default=[])
 
     args = parser.parse_args()
 
@@ -354,6 +275,5 @@ if __name__ == "__main__":
         args.train_ratio,
         args.noise_type,
         args.noise_ratio,
-        args.noise_classes,
         args.seed,
     )

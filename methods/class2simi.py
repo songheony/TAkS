@@ -69,9 +69,7 @@ def prepare_task_target(x, mask=None):
 def fit(dataloader, device, model, anchorrate):
     eta_corr = []
     with torch.no_grad():
-        for i, data in enumerate(dataloader):
-            images = data[0]
-
+        for i, (images, target, indexes) in enumerate(dataloader):
             if torch.cuda.is_available():
                 images = images.to(device)
 

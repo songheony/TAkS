@@ -124,6 +124,9 @@ def get_cifar10(root, noise_level):
     test_dataset = datasets.CIFAR10(
         root=root, download=True, train=False, transform=test_transform
     )
+    train_dataset.coarse_classes = list(range(10))
+    valid_dataset.coarse_classes = list(range(10))
+    test_dataset.coarse_classes = list(range(10))
     return train_dataset, valid_dataset, test_dataset, train_transform, test_transform
 
 
@@ -147,16 +150,15 @@ def get_cifar100(root, noise_level):
         task_name="cifar100",
         noise_level=noise_level,
         mode="train",
-        transform=train_transform,
     )
     valid_dataset = DeepMind(
         root=root,
         task_name="cifar100",
         noise_level=noise_level,
         mode="valid",
-        transform=test_transform,
     )
-    test_dataset = datasets.CIFAR100(
-        root=root, download=True, train=False, transform=test_transform
-    )
+    test_dataset = datasets.CIFAR100(root=root, download=True, train=False)
+    train_dataset.coarse_classes = list(range(20))
+    valid_dataset.coarse_classes = list(range(20))
+    test_dataset.coarse_classes = list(range(20))
     return train_dataset, valid_dataset, test_dataset, train_transform, test_transform

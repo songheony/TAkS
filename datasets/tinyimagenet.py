@@ -82,5 +82,7 @@ def get_tinyimagenet(root):
         ]
     )
     train_dataset = TinyImageNet(root=root, mode="train")
-    test_dataset = TinyImageNet(root=root, mode="test", transform=test_transform)
+    test_dataset = TinyImageNet(root=root, mode="test")
+    train_dataset.coarse_classes = list(range(200))
+    test_dataset.coarse_classes = list(range(200))
     return train_dataset, None, test_dataset, train_transform, test_transform

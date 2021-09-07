@@ -97,9 +97,7 @@ class NoiseEstimator:
 
         eta_corr = []
         with torch.no_grad():
-            for i, data in enumerate(train_dataloader):
-                images = data[0]
-
+            for i, (images, target, indexes) in enumerate(train_dataloader):
                 if torch.cuda.is_available():
                     images = images.to(device)
 

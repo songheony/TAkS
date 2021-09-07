@@ -3,8 +3,6 @@ import torch.nn as nn
 import numpy as np
 from torch.utils.data import DataLoader
 
-from dataset import selected_loader
-
 
 class TAkS:
     def __init__(
@@ -39,7 +37,7 @@ class TAkS:
         if isinstance(self.k_ratio, list):
             for i, k_ratio in enumerate(self.k_ratio):
                 assert 0 < k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
-                idx = np.where(np.array(self.train_dataset.coarses) == i)[0]
+                idx = np.where(self.train_dataset.coarses == i)[0]
                 n_experts = len(idx)
                 k = int(n_experts * k_ratio)
                 player = Player(
@@ -58,8 +56,6 @@ class TAkS:
             self.coarse_indices.append(idx)
             self.players.append(player)
 
-        self.coarse_indices = np.array(self.coarse_indices)
-
     def pre_epoch_hook(self, train_dataloader, model):
         loss = calc_loss(self.fixed_train_dataloader, model, self.device)
         
@@ -76,8 +72,7 @@ class TAkS:
         indices = torch.cat(indices).cpu().numpy()
         cum_losses = cum_losses.cpu().numpy()
         objectives = objectives.cpu().numpy()
-        selected_dataloader = selected_loader(train_dataloader, indices)
-        return loss, cum_loss, objective, [indices], selected_dataloader
+        return loss, cum_loss, objective, [indices]
 
     def loss(self, outputs, target, *args, **kwargs):
         output = outputs[0]
@@ -130,12 +125,7 @@ def calc_loss(train_loader, model, device):
 
     losses = []
     with torch.no_grad():
-        for i, data in enumerate(train_loader):
-            if len(data) == 3:
-                images, target, _ = data
-            elif len(data) == 2:
-                images, target = data
-
+        for i, (images, target, indexes) in enumerate(train_loader):
             if torch.cuda.is_available():
                 images = images.to(device)
                 target = target.to(device)

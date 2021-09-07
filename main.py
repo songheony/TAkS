@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
 from model import get_model
-from dataset import load_datasets
+from dataset import load_datasets, filter_loader
 from utils import (
     seed_all,
     save_metric,
@@ -59,7 +59,7 @@ def train(
         for m in range(len(models)):
             output = models[m](images)
             outputs.append(output)
-
+        
         # calculate loss and selected index
         ind = indexes.cpu().numpy().transpose()
         losses, ind_updates = method.loss(outputs, target, epoch=epoch, ind=ind)
@@ -108,7 +108,7 @@ def validate(val_loader, model, criterion, device, is_test):
     model.eval()
 
     with torch.no_grad():
-        for i, (images, target) in enumerate(val_loader):
+        for i, (images, target, indexes) in enumerate(val_loader):
             if torch.cuda.is_available():
                 images = images.to(device)
                 target = target.to(device)
@@ -153,7 +153,8 @@ def run(
         start_time = time.time()
 
         if hasattr(method, "pre_epoch_hook"):
-            loss, cum_loss, objective, inds_updates, selected_dataloader = method.pre_epoch_hook(train_dataloader, model)
+            loss, cum_loss, objective, pre_inds_updates = method.pre_epoch_hook(train_dataloader, model)
+            selected_dataloader = filter_loader(train_dataloader, pre_inds_updates[0])
         else:
             selected_dataloader = train_dataloader
 
@@ -167,6 +168,9 @@ def run(
         )
 
         epoch_time = time.time() - start_time
+
+        if hasattr(method, "pre_epoch_hook"):
+            inds_updates = pre_inds_updates
 
         if schedulers is not None:
             for scheduler in schedulers:
@@ -258,7 +262,6 @@ if __name__ == "__main__":
     parser.add_argument("--train_ratio", type=float, default=1.0)
     parser.add_argument("--noise_type", type=str, default="symmetric")
     parser.add_argument("--noise_ratio", type=float, default=0.8)
-    parser.add_argument("--noise_classes", type=list, default=[])
     parser.add_argument('--use_pretrained', action='store_true')
 
     parser.add_argument("--method_name", type=str, default="ftl")
@@ -321,7 +324,6 @@ if __name__ == "__main__":
         args.train_ratio,
         args.noise_type,
         args.noise_ratio,
-        args.noise_classes,
         args.seed,
     )
     train_dataloader = DataLoader(
@@ -340,16 +342,10 @@ if __name__ == "__main__":
     if args.noise_type not in ["symmetric", "asymmetric"]:
         dataset_log_dir = args.dataset_name
     else:
-        if len(args.noise_classes) > 0:
-            dataset_log_dir = os.path.join(
-                args.dataset_name,
-                f"delete({args.noise_classes})",
-            )
-        else:
-            dataset_log_dir = os.path.join(
-                args.dataset_name,
-                f"{args.noise_type}({args.noise_ratio * 100}%)",
-            )
+        dataset_log_dir = os.path.join(
+            args.dataset_name,
+            f"{args.noise_type}({args.noise_ratio * 100}%)",
+        )
 
     if args.train_ratio < 1:
         dataset_log_dir += f"-Train({args.train_ratio * 100}%)"
@@ -423,6 +419,7 @@ if __name__ == "__main__":
             device,
         )
     elif args.method_name == "taks":
+        k_ratio = [args.k_ratio for i in range(len(train_dataset.coarse_classes))]
         from methods.taks import TAkS
 
         method = TAkS(
@@ -430,7 +427,7 @@ if __name__ == "__main__":
             train_dataset,
             batch_size,
             epochs,
-            args.k_ratio,
+            k_ratio,
             device,
             args.use_total,
             args.use_noise,
