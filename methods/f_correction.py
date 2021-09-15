@@ -4,26 +4,18 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from model import get_model
-
 
 class F_correction:
     def __init__(
         self,
+        classifier,
         dataset_name,
-        log_dir,
-        dataset_log_dir,
-        model_name,
         dataloader,
-        seed,
         device,
     ):
+        self.classifier = classifier
         self.dataset_name = dataset_name
-        self.log_dir = log_dir
-        self.dataset_log_dir = dataset_log_dir
-        self.model_name = model_name
         self.dataloader = dataloader
-        self.seed = seed
         self.device = device
 
         self.name = "F-correction"
@@ -36,31 +28,14 @@ class F_correction:
         else:
             filter_outlier = True
 
-        root_log_dir = os.path.join(
-            self.log_dir,
-            self.dataset_log_dir,
-            self.model_name,
-            "Standard",
-            str(self.seed),
-        )
-
-        standard_path = os.path.join(
-            root_log_dir,
-            "model0",
-            "best_model.pt",
-        )
-        classifier = get_model(self.model_name, self.dataset_name, self.device)
-        classifier.load_state_dict(torch.load(standard_path))
-        classifier.eval()
         est = NoiseEstimator(
-            classifier=classifier, alpha=0.0, filter_outlier=filter_outlier
+            classifier=self.classifier, alpha=0.0, filter_outlier=filter_outlier
         )
         est.fit(self.dataloader, self.device)
         self.P_est = torch.tensor(est.predict().copy(), dtype=torch.float).to(
             self.device
         )
         del est
-        del classifier
 
     def loss(self, outputs, target, *args, **kwargs):
         epsilon = 1e-7
@@ -123,8 +98,7 @@ class NoiseEstimator:
                 robust_eta[robust_eta >= eta_thresh] = 0.0
                 idx_best = np.argmax(robust_eta)
 
-            for j in np.arange(c):
-                T[i, j] = eta_corr[idx_best, j]
+            T[i, :] = eta_corr[idx_best, :]
 
         self.T = T
         self.c = c

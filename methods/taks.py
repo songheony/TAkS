@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import numpy as np
@@ -6,20 +7,17 @@ from torch.utils.data import DataLoader
 
 class TAkS:
     def __init__(
-        self, criterion, train_dataset, batch_size, epochs, k_ratio, lr_ratio, device, dataset_name, log_dir, dataset_log_dir, model_name, seed, use_multi_k=False, use_total=True, use_noise=True,
+        self, classifier, criterion, train_dataset, dataset_name, batch_size, epochs, k_ratio, lr_ratio, device, use_multi_k=False, use_total=True, use_noise=True,
     ):
+        self.classifier = classifier
         self.criterion = criterion
         self.train_dataset = train_dataset
+        self.dataset_name = dataset_name
         self.batch_size = batch_size
         self.epochs = epochs
         self.k_ratio = k_ratio
         self.lr_ratio = lr_ratio
         self.device = device
-        self.dataset_name = dataset_name
-        self.log_dir = log_dir
-        self.dataset_log_dir = dataset_log_dir
-        self.model_name = model_name
-        self.seed = seed
         self.use_multi_k = use_multi_k
         self.use_total = use_total
         self.use_noise = use_noise
@@ -27,40 +25,37 @@ class TAkS:
         assert 0 <= k_ratio <= 1, f"{k_ratio} must be 0 <= k_ratio <= 1"
 
         if self.k_ratio == 0:
-            self.name = f"TAkS(Auto K,LR_ratio-{self.lr_ratio})"
+            self.name = f"TAkS(Auto K,LR_ratio-{self.lr_ratio},Total-{self.use_total},Noise-{self.use_noise})"
         elif self.use_multi_k:
-            self.name = f"TAkS(K_ratios-{self.k_ratio*100}%,LR_ratio-{self.lr_ratio})"
+            self.name = f"TAkS(K_ratios-{self.k_ratio*100}%,LR_ratio-{self.lr_ratio},Total-{self.use_total},Noise-{self.use_noise})"
         else:
-            self.name = f"TAkS(K_ratio-{self.k_ratio*100}%,LR_ratio-{self.lr_ratio})"
+            self.name = f"TAkS(K_ratio-{self.k_ratio*100}%,LR_ratio-{self.lr_ratio},Total-{self.use_total},Noise-{self.use_noise})"
         self.num_models = 1
         self._config()
 
     def _predict_k(self):
-        if self.dataset_name == "mnist":
-            anchorrate = 90
-        else:
-            anchorrate = 100
+        self.classifier.eval()
 
-        root_log_dir = os.path.join(
-            self.log_dir,
-            self.dataset_log_dir,
-            self.model_name,
-            "Standard",
-            str(self.seed),
-        )
-        standard_path = os.path.join(
-            root_log_dir,
-            "model0",
-            "best_model.pt",
-        )
-        classifier = get_model(self.model_name, self.dataset_name, self.device)
-        classifier.load_state_dict(torch.load(standard_path))
-        classifier.eval()
-        est = NoiseEstimator(classifier=model, filter_outlier=True)
-        est.fit(self.fixed_train_dataloader, self.device, anchorrate=anchorrate)
-        transition_matrix = est.predict()
-        k_ratios = transition_matrix.diagonal()
-        return k_ratios
+        c = len(self.fixed_train_dataloader.dataset.classes)
+        corrects = np.zeros((c))
+        total = np.zeros((c))
+        with torch.no_grad():
+            for images, target, indexes in self.fixed_train_dataloader:
+                if torch.cuda.is_available():
+                    images = images.to(self.device)
+                    target = target.to(self.device)
+
+                # compute output
+                output = self.classifier(images)
+                pred = output.argmax(dim=1).T
+                correct = (pred == target)
+
+                for i in range(c):
+                    mask_class = (target == i)
+                    corrects[i] += (correct * mask_class).sum()
+                    total[i] += mask_class.sum()
+
+        return corrects / total
 
     def _config(self):
         self.fixed_train_dataloader = DataLoader(
@@ -93,8 +88,31 @@ class TAkS:
             self.class_indices.append(idx)
             self.players.append(player)
 
-    def pre_epoch_hook(self, train_dataloader, model):
-        loss = calc_loss(self.fixed_train_dataloader, model, self.device)
+    def _calc_loss(self, model):
+        # switch to evaluate mode
+        model.eval()
+
+        criterion = nn.CrossEntropyLoss(reduction="none")
+
+        losses = []
+        with torch.no_grad():
+            for i, (images, target, indexes) in enumerate(self.fixed_train_dataloader):
+                if torch.cuda.is_available():
+                    images = images.to(self.device)
+                    target = target.to(self.device)
+
+                # compute output
+                output = model(images)
+
+                # compute loss
+                loss = criterion(output, target)
+                losses.append(loss)
+
+        losses = torch.cat(losses, dim=0)
+        return losses
+
+    def pre_epoch_hook(self, model):
+        loss = self._calc_loss(model)
         
         indices = []
         cum_losses = np.empty(len(loss))
@@ -151,27 +169,3 @@ class Player:
         self.w[idx] = True
 
         return self.total_loss, objective
-
-
-def calc_loss(train_loader, model, device):
-    # switch to evaluate mode
-    model.eval()
-
-    criterion = nn.CrossEntropyLoss(reduction="none")
-
-    losses = []
-    with torch.no_grad():
-        for i, (images, target, indexes) in enumerate(train_loader):
-            if torch.cuda.is_available():
-                images = images.to(device)
-                target = target.to(device)
-
-            # compute output
-            output = model(images)
-
-            # compute loss
-            loss = criterion(output, target)
-            losses.append(loss)
-
-    losses = torch.cat(losses, dim=0)
-    return losses

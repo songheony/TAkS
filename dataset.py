@@ -26,6 +26,7 @@ class Subset(Dataset):
 
         self.classes = self.dataset.classes
         self.coarse_classes = self.dataset.coarse_classes
+        self.targets = np.array(self.dataset.targets)[self.indices]
 
     def __getitem__(self, idx):
         x, y = self.dataset[self.indices[idx]]

@@ -6,7 +6,6 @@ import torch.nn.functional as F
 import torch.nn as nn
 from torch.autograd import Variable
 
-from model import get_model
 from methods.f_correction import NoiseEstimator
 
 
@@ -64,22 +63,16 @@ def prepare_task_target(x, mask=None):
 class Class2Simi:
     def __init__(
         self,
+        classifier,
         loss_type,
         dataset_name,
-        log_dir,
-        dataset_log_dir,
-        model_name,
         dataloader,
-        seed,
         device,
     ):
+        self.classifier = classifier
         self.loss_type = loss_type
         self.dataset_name = dataset_name
-        self.log_dir = log_dir
-        self.dataset_log_dir = dataset_log_dir
-        self.model_name = model_name
         self.dataloader = dataloader
-        self.seed = seed
         self.device = device
 
         self.name = "Class2Simi"
@@ -97,24 +90,7 @@ class Class2Simi:
         else:
             anchorrate = 100
 
-        root_log_dir = os.path.join(
-            self.log_dir,
-            self.dataset_log_dir,
-            self.model_name,
-            "Standard",
-            str(self.seed),
-        )
-
-        standard_path = os.path.join(
-            root_log_dir,
-            "model0",
-            "best_model.pt",
-        )
-        model = get_model(self.model_name, self.dataset_name, self.device)
-        model.load_state_dict(torch.load(standard_path))
-        model.eval()
-
-        est = NoiseEstimator(classifier=model, filter_outlier=True)
+        est = NoiseEstimator(classifier=self.classifier, filter_outlier=True)
         est.fit(self.dataloader, self.device, anchorrate=anchorrate)
         transition_matrix = est.predict()
         simi_T = class2simi(transition_matrix)

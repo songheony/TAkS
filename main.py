@@ -153,7 +153,7 @@ def run(
         start_time = time.time()
 
         if hasattr(method, "pre_epoch_hook"):
-            loss, cum_loss, objective, pre_inds_updates = method.pre_epoch_hook(train_dataloader, model)
+            loss, cum_loss, objective, pre_inds_updates = method.pre_epoch_hook(model)
             selected_dataloader = filter_loader(train_dataloader, pre_inds_updates[0])
         else:
             selected_dataloader = train_dataloader
@@ -269,9 +269,9 @@ if __name__ == "__main__":
     # ours
     parser.add_argument("--k_ratio", type=float, default=0.2)
     parser.add_argument("--lr_ratio", type=float, default=0.01)
-    parser.add_argument("--use_multi_k", type=bool, default=False)
-    parser.add_argument("--use_total", type=bool, default=True)
-    parser.add_argument("--use_noise", type=bool, default=True)
+    parser.add_argument("--use_multi_k", action='store_true')
+    parser.add_argument("--use_total", action='store_true')
+    parser.add_argument("--use_noise", action='store_true')
 
     # precision
     parser.add_argument("--precision", type=float, default=0.2)
@@ -354,6 +354,27 @@ if __name__ == "__main__":
     
     #endregion
 
+    #region load pretrained model
+    if args.method_name in ["f-correction", "class2simi", "taks"]:
+        pretrained_model = get_model(model_name, args.dataset_name, device)
+        root_log_dir = os.path.join(
+            args.log_dir,
+            dataset_log_dir,
+            model_name,
+            "Standard",
+            str(args.seed),
+        )
+        standard_path = os.path.join(
+            root_log_dir,
+            "model0",
+            "best_model.pt",
+        )
+        if os.path.exists(standard_path):
+            pretrained_model.load_state_dict(torch.load(standard_path))
+        else:
+            raise ValueError("There is no pretrained model!")
+    #endregion
+
     #region prepare methods
     start_time = time.time()
     if args.method_name == "standard":
@@ -364,12 +385,9 @@ if __name__ == "__main__":
         from methods.f_correction import F_correction
 
         method = F_correction(
+            pretrained_model,
             args.dataset_name,
-            args.log_dir,
-            dataset_log_dir,
-            model_name,
             train_dataloader,
-            args.seed,
             device,
         )
     elif args.method_name == "decouple":
@@ -411,31 +429,25 @@ if __name__ == "__main__":
         from methods.class2simi import Class2Simi
 
         method = Class2Simi(
+            pretrained_model,
             loss_type,
             args.dataset_name,
-            args.log_dir,
-            dataset_log_dir,
-            model_name,
             train_dataloader,
-            args.seed,
             device,
         )
     elif args.method_name == "taks":
         from methods.taks import TAkS
 
         method = TAkS(
+            pretrained_model,
             criterion,
             train_dataset,
+            args.dataset_name,
             batch_size,
             epochs,
             args.k_ratio,
             args.lr_ratio,
             device,
-            args.dataset_name,
-            args.log_dir,
-            dataset_log_dir,
-            model_name,
-            args.seed,
             args.use_multi_k,
             args.use_total,
             args.use_noise,
