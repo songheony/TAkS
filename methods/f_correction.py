@@ -91,7 +91,7 @@ class NoiseEstimator:
         self.verbose = verbose
         self.T = None
 
-    def fit(self, train_dataloader, device):
+    def fit(self, train_dataloader, device, anchorrate=97):
         # predict probability on the fresh sample
         self.classifier.eval()
 
@@ -118,7 +118,7 @@ class NoiseEstimator:
             if not self.filter_outlier:
                 idx_best = np.argmax(eta_corr[:, i])
             else:
-                eta_thresh = np.percentile(eta_corr[:, i], 97, interpolation="higher")
+                eta_thresh = np.percentile(eta_corr[:, i], anchorrate, interpolation="higher")
                 robust_eta = eta_corr[:, i]
                 robust_eta[robust_eta >= eta_thresh] = 0.0
                 idx_best = np.argmax(robust_eta)

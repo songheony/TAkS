@@ -7,12 +7,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 
 from model import get_model
-
-
-def norm(T):
-    row_sum = np.sum(T, 1)
-    T_norm = T / row_sum
-    return T_norm
+from methods.f_correction import NoiseEstimator
 
 
 def class2simi(transition_matrix):
@@ -64,37 +59,6 @@ def prepare_task_target(x, mask=None):
     train_target = out.view(-1)
     eval_target = x
     return train_target.detach(), eval_target.detach()  # Make sure no gradients
-
-
-def fit(dataloader, device, model, anchorrate):
-    eta_corr = []
-    with torch.no_grad():
-        for i, (images, target, indexes) in enumerate(dataloader):
-            if torch.cuda.is_available():
-                images = images.to(device)
-
-            # compute output
-            output = model(images)
-            output = F.softmax(output, dim=1).detach()
-            eta_corr.append(output)
-
-    eta_corr = torch.cat(eta_corr, dim=0)
-    eta_corr = eta_corr.cpu().numpy()
-
-    c = len(dataloader.dataset.classes)
-    T = np.empty((c, c))
-
-    # find a 'perfect example' for each class
-    for i in np.arange(c):
-        eta_thresh = np.percentile(eta_corr[:, i], anchorrate, interpolation="higher")
-        robust_eta = eta_corr[:, i]
-        robust_eta[robust_eta >= eta_thresh] = 0.0
-        idx_best = np.argmax(robust_eta)
-
-        for j in np.arange(c):
-            T[i, j] = eta_corr[idx_best, j]
-
-    return T
 
 
 class Class2Simi:
@@ -150,8 +114,9 @@ class Class2Simi:
         model.load_state_dict(torch.load(standard_path))
         model.eval()
 
-        transition_matrix = fit(self.dataloader, self.device, model, anchorrate)
-        transition_matrix = norm(transition_matrix)
+        est = NoiseEstimator(classifier=model, filter_outlier=True)
+        est.fit(self.dataloader, self.device, anchorrate=anchorrate)
+        transition_matrix = est.predict()
         simi_T = class2simi(transition_matrix)
         self.T = torch.from_numpy(simi_T).float().to(self.device)
 

@@ -268,6 +268,8 @@ if __name__ == "__main__":
 
     # ours
     parser.add_argument("--k_ratio", type=float, default=0.2)
+    parser.add_argument("--lr_ratio", type=float, default=0.01)
+    parser.add_argument("--use_multi_k", type=bool, default=False)
     parser.add_argument("--use_total", type=bool, default=True)
     parser.add_argument("--use_noise", type=bool, default=True)
 
@@ -419,7 +421,6 @@ if __name__ == "__main__":
             device,
         )
     elif args.method_name == "taks":
-        k_ratio = [args.k_ratio for i in range(len(train_dataset.coarse_classes))]
         from methods.taks import TAkS
 
         method = TAkS(
@@ -427,8 +428,15 @@ if __name__ == "__main__":
             train_dataset,
             batch_size,
             epochs,
-            k_ratio,
+            args.k_ratio,
+            args.lr_ratio,
             device,
+            args.dataset_name,
+            args.log_dir,
+            dataset_log_dir,
+            model_name,
+            args.seed,
+            args.use_multi_k,
             args.use_total,
             args.use_noise,
         )

@@ -10,20 +10,23 @@ noise_type="symmetric"
 noise_ratios=(0.2 0.4 0.6)
 
 # create dataset
-for (( j=0; j<${#datasets[@]}; j++ )); do
-    for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+for (( i=0; i<${#datasets[@]}; i++ )); do
+    for (( j=0; j<${#noise_ratios[@]}; j++ )); do
+        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$i]} --noise_type $noise_type --noise_ratio ${noise_ratios[$j]}
     done
 done
 
 # tune hyper-parameters
 k_diffs=(-0.15 -0.1 -0.05 0 0.05 0.1 0.15)
-for (( j=0; j<${#datasets[@]}; j++ )); do
-    for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
-        for (( m=0; m<${#k_diffs[@]}; m++ )); do
-            k_ratio=$(python -c "print(1-${noise_ratios[$k]}+${k_diffs[$m]})")
-            python ./main.py --method_name "taks" --k_ratio $k_ratio $common
+lr_ratios=(1 0.1 0.001 0.0001)
+for (( i=0; i<${#datasets[@]}; i++ )); do
+    for (( j=0; j<${#noise_ratios[@]}; j++ )); do
+        common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$i]} --noise_type $noise_type --noise_ratio ${noise_ratios[$j]}"
+        for (( k=0; k<${#k_diffs[@]}; k++ )); do
+            for (( l=0; l<${#lr_ratios[@]}; l++ )); do
+                k_ratio=$(python -c "print(1-${noise_ratios[$j]}+${k_diffs[$k]})")
+                python ./main.py --method_name "taks" --k_ratio $k_ratio --lr_ratio ${lr_ratios[$l]} $common
+            done
         done
     done
 done
@@ -33,20 +36,22 @@ noise_type="asymmetric"
 noise_ratios=(0.2 0.4 0.6)
 
 # create dataset
-for (( j=0; j<${#datasets[@]}; j++ )); do
-    for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+for (( i=0; i<${#datasets[@]}; i++ )); do
+    for (( j=0; j<${#noise_ratios[@]}; j++ )); do
+        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$i]} --noise_type $noise_type --noise_ratio ${noise_ratios[$j]}
     done
 done
 
 # tune hyper-parameters
 k_diffs=(-0.15 -0.1 -0.05 0 0.05 0.1 0.15)
-for (( j=0; j<${#datasets[@]}; j++ )); do
-    for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}"
-        for (( m=0; m<${#k_diffs[@]}; m++ )); do
-            k_ratio=$(python -c "print(1-${noise_ratios[$k]}+${k_diffs[$m]})")
-            python ./main.py --method_name "taks" --k_ratio $k_ratio $common
+for (( i=0; i<${#datasets[@]}; i++ )); do
+    for (( j=0; j<${#noise_ratios[@]}; j++ )); do
+        common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$i]} --noise_type $noise_type --noise_ratio ${noise_ratios[$j]}"
+        for (( k=0; k<${#k_diffs[@]}; k++ )); do
+            for (( l=0; l<${#lr_ratios[@]}; l++ )); do
+                k_ratio=$(python -c "print(1-${noise_ratios[$j]}+${k_diffs[$k]})")
+                python ./main.py --method_name "taks" --k_ratio $k_ratio --lr_ratio ${lr_ratios[$l]} $common
+            done
         done
     done
 done

@@ -6,23 +6,61 @@ from torch.utils.data import DataLoader
 
 class TAkS:
     def __init__(
-        self, criterion, train_dataset, batch_size, epochs, k_ratio, device, use_total=True, use_noise=True,
+        self, criterion, train_dataset, batch_size, epochs, k_ratio, lr_ratio, device, dataset_name, log_dir, dataset_log_dir, model_name, seed, use_multi_k=False, use_total=True, use_noise=True,
     ):
         self.criterion = criterion
         self.train_dataset = train_dataset
         self.batch_size = batch_size
         self.epochs = epochs
         self.k_ratio = k_ratio
+        self.lr_ratio = lr_ratio
         self.device = device
+        self.dataset_name = dataset_name
+        self.log_dir = log_dir
+        self.dataset_log_dir = dataset_log_dir
+        self.model_name = model_name
+        self.seed = seed
+        self.use_multi_k = use_multi_k
         self.use_total = use_total
         self.use_noise = use_noise
 
-        if isinstance(self.k_ratio, list):
-            self.name = f"TAkS(K_ratio-{self.k_ratio})"
+        assert 0 <= k_ratio <= 1, f"{k_ratio} must be 0 <= k_ratio <= 1"
+
+        if self.k_ratio == 0:
+            self.name = f"TAkS(Auto K,LR_ratio-{self.lr_ratio})"
+        elif self.use_multi_k:
+            self.name = f"TAkS(K_ratios-{self.k_ratio*100}%,LR_ratio-{self.lr_ratio})"
         else:
-            self.name = f"TAkS(K_ratio-{self.k_ratio*100}%)"
+            self.name = f"TAkS(K_ratio-{self.k_ratio*100}%,LR_ratio-{self.lr_ratio})"
         self.num_models = 1
         self._config()
+
+    def _predict_k(self):
+        if self.dataset_name == "mnist":
+            anchorrate = 90
+        else:
+            anchorrate = 100
+
+        root_log_dir = os.path.join(
+            self.log_dir,
+            self.dataset_log_dir,
+            self.model_name,
+            "Standard",
+            str(self.seed),
+        )
+        standard_path = os.path.join(
+            root_log_dir,
+            "model0",
+            "best_model.pt",
+        )
+        classifier = get_model(self.model_name, self.dataset_name, self.device)
+        classifier.load_state_dict(torch.load(standard_path))
+        classifier.eval()
+        est = NoiseEstimator(classifier=model, filter_outlier=True)
+        est.fit(self.fixed_train_dataloader, self.device, anchorrate=anchorrate)
+        transition_matrix = est.predict()
+        k_ratios = transition_matrix.diagonal()
+        return k_ratios
 
     def _config(self):
         self.fixed_train_dataloader = DataLoader(
@@ -32,46 +70,43 @@ class TAkS:
             num_workers=16,
         )
 
-        self.coarse_indices = []
-        self.players = []
-        if isinstance(self.k_ratio, list):
-            for i, k_ratio in enumerate(self.k_ratio):
-                assert 0 < k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
-                idx = np.where(self.train_dataset.coarses == i)[0]
-                n_experts = len(idx)
-                k = int(n_experts * k_ratio)
-                player = Player(
-                    n_experts, k, self.epochs, self.device, use_total=self.use_total, use_noise=self.use_noise
-                )
-                self.coarse_indices.append(idx)
-                self.players.append(player)
+        if self.k_ratio == 0:
+            k_ratios = self._predict_k()
+            self.use_multi_k = True
+        elif self.use_multi_k:
+            k_ratios = [self.k_ratio] * len(self.train_dataset.classes)
         else:
-            assert 0 < self.k_ratio <= 1, "k_ratio should be less than 1 and greater than 0"
-            idx = list(range(len(self.train_dataset)))
+            k_ratios = [self.k_ratio]
+
+        self.class_indices = []
+        self.players = []
+        for i, k_ratio in enumerate(k_ratios):
+            if self.use_multi_k:
+                idx = np.where(self.train_dataset.targets == i)[0]
+            else:
+                idx = np.arange(len(self.train_dataset))
             n_experts = len(idx)
-            k = int(n_experts * self.k_ratio)
+            k = int(n_experts * k_ratio)
             player = Player(
-                n_experts, k, self.epochs, self.device, use_total=self.use_total, use_noise=self.use_noise
+                n_experts, k, self.lr_ratio, self.epochs, self.device, use_total=self.use_total, use_noise=self.use_noise
             )
-            self.coarse_indices.append(idx)
+            self.class_indices.append(idx)
             self.players.append(player)
 
     def pre_epoch_hook(self, train_dataloader, model):
         loss = calc_loss(self.fixed_train_dataloader, model, self.device)
         
         indices = []
-        cum_losses = torch.empty(len(loss), device=self.device)
-        objectives = torch.empty(len(loss), device=self.device)
+        cum_losses = np.empty(len(loss))
+        objectives = np.empty(len(loss))
         for i, player in enumerate(self.players):
-            coarse_idx = self.coarse_indices[i]
-            cum_loss, objective = player.update(loss[coarse_idx])
-            selected_idx = torch.where(player.w)[0]
-            indices.append(selected_idx)
-            cum_losses[coarse_idx] = cum_loss
-            objectives[coarse_idx] = objective
-        indices = torch.cat(indices).cpu().numpy()
-        cum_losses = cum_losses.cpu().numpy()
-        objectives = objectives.cpu().numpy()
+            class_idx = self.class_indices[i]
+            cum_loss, objective = player.update(loss[class_idx])
+            selected_idx = torch.where(player.w)[0].cpu()
+            indices.append(class_idx[selected_idx])
+            cum_losses[class_idx] = cum_loss.cpu()
+            objectives[class_idx] = objective.cpu()
+        indices = np.concatenate(indices)
         return loss, cum_loss, objective, [indices]
 
     def loss(self, outputs, target, *args, **kwargs):
@@ -81,9 +116,10 @@ class TAkS:
 
 
 class Player:
-    def __init__(self, n_experts, k, T, device, use_total=True, use_noise=True):
+    def __init__(self, n_experts, k, lr_ratio, T, device, use_total=True, use_noise=True):
         self.n_experts = n_experts
         self.k = k
+        self.lr_ratio = lr_ratio
         self.T = T
         self.device = device
         self.use_total = use_total
@@ -92,7 +128,7 @@ class Player:
         self.init()
 
     def init(self):
-        self.lr = np.sqrt(self.T)
+        self.lr = self.lr_ratio * np.sqrt(self.T)
         self.w = torch.zeros(self.n_experts, dtype=torch.bool, device=self.device)
         self.w[np.random.choice(self.n_experts, self.k, replace=False)] = True
         self.total_loss = torch.zeros(self.n_experts, device=self.device)
