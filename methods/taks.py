@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 class TAkS:
     def __init__(
-        self, classifier, criterion, train_dataset, dataset_name, batch_size, epochs, k_ratio, lr_ratio, device, use_multi_k=False, use_total=True, use_noise=True,
+        self, classifier, criterion, train_dataset, dataset_name, batch_size, epochs, k_ratio, lr_ratio, device, use_auto_k=False, use_multi_k=False, use_total=True, use_noise=True,
     ):
         self.classifier = classifier
         self.criterion = criterion
@@ -18,14 +18,16 @@ class TAkS:
         self.k_ratio = k_ratio
         self.lr_ratio = lr_ratio
         self.device = device
+        self.use_auto_k = use_auto_k
         self.use_multi_k = use_multi_k
         self.use_total = use_total
         self.use_noise = use_noise
 
-        assert 0 <= k_ratio <= 1, f"{k_ratio} must be 0 <= k_ratio <= 1"
-
-        if self.k_ratio == 0:
-            self.name = f"TAkS(Auto K,LR_ratio-{self.lr_ratio},Total-{self.use_total},Noise-{self.use_noise})"
+        if self.use_auto_k:
+            if self.k_ratio == 0:
+                self.name = f"TAkS(Auto K,LR_ratio-{self.lr_ratio},Total-{self.use_total},Noise-{self.use_noise})"
+            else:
+                self.name = f"TAkS(Auto K-{self.k_ratio*100}%,LR_ratio-{self.lr_ratio},Total-{self.use_total},Noise-{self.use_noise})"
         elif self.use_multi_k:
             self.name = f"TAkS(K_ratios-{self.k_ratio*100}%,LR_ratio-{self.lr_ratio},Total-{self.use_total},Noise-{self.use_noise})"
         else:
@@ -65,8 +67,9 @@ class TAkS:
             num_workers=16,
         )
 
-        if self.k_ratio == 0:
-            k_ratios = self._predict_k()
+        if self.use_auto_k:
+            k_ratios = self._predict_k() + self.k_ratio
+            k_ratios = np.minimum(np.maximum(k_ratios, 0), 1)
             self.use_multi_k = True
         elif self.use_multi_k:
             k_ratios = [self.k_ratio] * len(self.train_dataset.classes)

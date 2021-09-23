@@ -269,6 +269,7 @@ if __name__ == "__main__":
     # ours
     parser.add_argument("--k_ratio", type=float, default=0.2)
     parser.add_argument("--lr_ratio", type=float, default=0.01)
+    parser.add_argument("--use_auto_k", action='store_true')
     parser.add_argument("--use_multi_k", action='store_true')
     parser.add_argument("--use_total", action='store_true')
     parser.add_argument("--use_noise", action='store_true')
@@ -448,6 +449,7 @@ if __name__ == "__main__":
             args.k_ratio,
             args.lr_ratio,
             device,
+            args.use_auto_k,
             args.use_multi_k,
             args.use_total,
             args.use_noise,
