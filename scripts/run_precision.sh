@@ -10,20 +10,21 @@ precisions=(0.2 0.4 0.6 0.8 1.0)
 
 # symmetric
 noise_type="symmetric"
-noise_ratios=(0.5)
+noise_ratios=(0.4)
 
 # create dataset
-for (( j=0; j<${#datasets[@]}; j++ )); do
-    for (( k=0; k<${#noise_ratios[@]}; k++ )); do
-        python ./dataset.py --train_ratio 0.8 --seed $seed --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+for (( i=0; i<${#datasets[@]}; i++ )); do
+    for (( j=0; j<${#noise_ratios[@]}; j++ )); do
+        python ./dataset.py --train_ratio 0.9 --seed $seed --dataset_name ${datasets[$i]} --noise_type $noise_type --noise_ratio ${noise_ratios[$j]}
     done
 done
 
-k_ratios=(0.5)
-for (( j=0; j<${#datasets[@]}; j++ )); do
-    for (( k=0; k<${#noise_ratios[@]}; k++ )); do
+for (( i=0; i<${#datasets[@]}; i++ )); do
+    for (( j=0; j<${#noise_ratios[@]}; j++ )); do
+        common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$i]} --noise_type $noise_type --noise_ratio ${noise_ratios[$j]}"
+        k_ratio=$(python -c "print(1-${noise_ratios[$j]})")
         for (( l=0; l<${#precisions[@]}; l++ )); do
-            python ./main.py --method_name "precision" --k_ratio ${k_ratios[$k]} --precision ${precisions[$l]} --train_ratio 0.8 --seed $seed --gpu $gpu --log_dir $log_dir --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+            python ./main.py --method_name "precision" --k_ratio $k_ratio --precision ${precisions[$l]} --use_multi_k $common
         done
     done
 done
