@@ -112,7 +112,7 @@ def divide_train(
         train_size = int(len(train_dataset) * train_ratio)
         val_size = len(train_dataset) - train_size
 
-        indices = randperm(train_size + val_size, generator=torch.default_generator).tolist()
+        indices = torch.randperm(train_size + val_size, generator=torch.default_generator).tolist()
         train_subset = Subset(train_dataset, indices[:train_size], dataset_name, train_transform)
         valid_subset = Subset(train_dataset, indices[train_size:], dataset_name, test_transform)
         np.save(train_subset_path, train_subset.indices)
