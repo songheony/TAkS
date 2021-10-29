@@ -21,7 +21,6 @@ for (( i=0; i<${#datasets[@]}; i++ )); do
         common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$i]} --noise_type $noise_type --noise_ratio ${noise_ratios[$j]}"
         python ./main.py --method_name "taks" --use_auto_k $common --use_pretrained
         python ./main.py --method_name "taks" --use_auto_k --use_total $common --use_pretrained
-        python ./main.py --method_name "taks" --use_auto_k --use_total --use_noise $common --use_pretrained
     done
 done
 
@@ -41,6 +40,5 @@ for (( i=0; i<${#datasets[@]}; i++ )); do
         common="--train_ratio 0.9 --seed $seed --gpu $gpu --dataset_name ${datasets[$i]} --noise_type $noise_type --noise_ratio ${noise_ratios[$j]}"
         python ./main.py --method_name "taks" --use_auto_k $common --use_pretrained
         python ./main.py --method_name "taks" --use_auto_k --use_total $common --use_pretrained
-        python ./main.py --method_name "taks" --use_auto_k --use_total --use_noise $common --use_pretrained
     done
 done
