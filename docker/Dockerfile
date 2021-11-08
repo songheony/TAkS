@@ -1,14 +1,11 @@
 # Based on Deepo
 
-FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
+FROM rapidsai/rapidsai:cuda10.1-base-ubuntu18.04-py3.7
 ENV LANG C.UTF-8
 ENV APT_INSTALL="apt-get install -y --no-install-recommends"
-ENV PIP_INSTALL="python -m pip --no-cache-dir install --upgrade"
+ENV PIP_INSTALL="/opt/conda/envs/rapids/bin/python -m pip --no-cache-dir install --upgrade"
 ENV GIT_CLONE="git clone --depth 10"
-RUN rm -rf /var/lib/apt/lists/* \
-           /etc/apt/sources.list.d/cuda.list \
-           /etc/apt/sources.list.d/nvidia-ml.list && \
-    apt-get update
+RUN apt-get update
 
 # ==================================================================
 # tools
@@ -27,52 +24,14 @@ RUN DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
         unrar \
         tmux \
         rsync \
-        zsh \
-        && \
-    $GIT_CLONE https://github.com/Kitware/CMake ~/cmake && \
-    cd ~/cmake && \
-    ./bootstrap && \
-    make -j"$(nproc)" install
+        zsh
 
 # ==================================================================
-# python
+# tensorflow
 # ------------------------------------------------------------------
 
-RUN DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
-        software-properties-common \
-        && \
-    add-apt-repository ppa:deadsnakes/ppa && \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
-        python3.7 \
-        python3.7-dev \
-        python3-distutils-extra \
-        && \
-    wget -O ~/get-pip.py \
-        https://bootstrap.pypa.io/get-pip.py && \
-    python3.7 ~/get-pip.py && \
-    ln -s /usr/bin/python3.7 /usr/local/bin/python3 && \
-    ln -s /usr/bin/python3.7 /usr/local/bin/python && \
-    $PIP_INSTALL \
-        setuptools \
-        && \
-    $PIP_INSTALL \
-        numpy \
-        scipy \
-        pandas \
-        cloudpickle \
-        scikit-image \
-        scikit-learn \
-        matplotlib \
-        Cython \
-        tqdm
-
-# ==================================================================
-# jupyter
-# ------------------------------------------------------------------
-
-RUN $PIP_INSTALL \
-        jupyter
+ RUN $PIP_INSTALL \
+        tensorflow-cpu
 
 # ==================================================================
 # pytorch
@@ -96,7 +55,9 @@ RUN $PIP_INSTALL \
 
 RUN $PIP_INSTALL \
         plotly \
-        kaleido
+        kaleido \
+        tensorboard \
+        gsutil
 
 # ==================================================================
 # config & cleanup
@@ -119,5 +80,6 @@ RUN git clone https://github.com/powerline/fonts.git --depth=1
 RUN sh fonts/install.sh
 RUN rm -rf fonts
 RUN sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/g' ~/.zshrc
+RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.zshrc
+RUN echo "conda activate rapids" >> ~/.zshrc
 RUN echo "cd /workspace" >> ~/.zshrc
-RUN echo "export PYTHONPATH=\"/opt/ASAP/bin":"\$PYTHONPATH\"" >> ~/.zshrc
