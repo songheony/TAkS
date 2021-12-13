@@ -156,7 +156,7 @@ def run(
             loss, cum_loss, objective, selected_ind = method.pre_epoch_hook(model)
             selected_dataloader = filter_loader(train_dataloader, selected_ind)
         else:
-            selected_dataloader = train_dataloader
+            loss = cum_loss = objective = None 
 
         train_loss_avgs, train_top1_avgs, train_top5_avgs, selected_indices = train(
             method,
@@ -217,15 +217,17 @@ def run(
             }
             metrics[i].append(metric)
 
-            if hasattr(method, "post_iter_hook"):
+            if loss is not None:
                 loss_path = os.path.join(writers[i].log_dir, f"loss_{epoch}.npy")
                 np.save(loss_path, loss)
 
+            if cum_loss is not None:
                 cum_loss_path = os.path.join(
                     writers[i].log_dir, f"cum_loss_{epoch}.npy"
                 )
                 np.save(cum_loss_path, cum_loss)
 
+            if objective is not None:
                 objective_path = os.path.join(
                     writers[i].log_dir, f"objective_{epoch}.npy"
                 )
