@@ -1,16 +1,15 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from torch.utils.data import DataLoader
 
 
 class TAkS:
     def __init__(
-        self, classifier, criterion, train_dataset, dataset_name, batch_size, epochs, k_ratio, lr_ratio, device, use_auto_k=False, use_multi_k=False, use_total=True, use_noise=True,
+        self, classifier, criterion, dataloader, dataset_name, batch_size, epochs, k_ratio, lr_ratio, device, use_auto_k=False, use_multi_k=False, use_total=True, use_noise=True,
     ):
         self.classifier = classifier
         self.criterion = criterion
-        self.train_dataset = train_dataset
+        self.dataloader = dataloader
         self.dataset_name = dataset_name
         self.batch_size = batch_size
         self.epochs = epochs
@@ -36,13 +35,12 @@ class TAkS:
 
     def _predict_k(self):
         self.classifier.eval()
-        self.train_dataset.apply_transform = False
 
-        c = len(self.fixed_train_dataloader.dataset.classes)
+        c = len(self.dataloader.dataset.classes)
         corrects = np.zeros((c))
         total = np.zeros((c))
         with torch.no_grad():
-            for images, target, indexes in self.fixed_train_dataloader:
+            for images, target, indexes in self.dataloader:
                 if torch.cuda.is_available():
                     images = images.to(self.device)
                     target = target.to(self.device)
@@ -57,24 +55,15 @@ class TAkS:
                     corrects[i] += (correct * mask_class).sum()
                     total[i] += mask_class.sum()
 
-        self.train_dataset.apply_transform = True
-
         return corrects / total
 
     def _config(self):
-        self.fixed_train_dataloader = DataLoader(
-            self.train_dataset,
-            batch_size=self.batch_size * 4,
-            shuffle=False,
-            num_workers=16,
-        )
-
         if self.use_auto_k:
             k_ratios = self._predict_k() + self.k_ratio
             k_ratios = np.minimum(np.maximum(k_ratios, 0), 1)
             self.use_multi_k = True
         elif self.use_multi_k:
-            k_ratios = [self.k_ratio] * len(self.train_dataset.classes)
+            k_ratios = [self.k_ratio] * len(self.dataloader.dataset.classes)
         else:
             k_ratios = [self.k_ratio]
 
@@ -82,9 +71,9 @@ class TAkS:
         self.players = []
         for i, k_ratio in enumerate(k_ratios):
             if self.use_multi_k:
-                idx = np.where(self.train_dataset.targets == i)[0]
+                idx = np.where(self.dataloader.dataset.targets == i)[0]
             else:
-                idx = np.arange(len(self.train_dataset))
+                idx = np.arange(len(self.dataloader))
             n_experts = len(idx)
             k = int(n_experts * k_ratio)
             player = Player(
@@ -94,15 +83,14 @@ class TAkS:
             self.players.append(player)
 
     def _calc_loss(self, model):
+        criterion = nn.CrossEntropyLoss(reduction="none")
+
         # switch to evaluate mode
         model.eval()
-        self.train_dataset.apply_transform = False
-
-        criterion = nn.CrossEntropyLoss(reduction="none")
 
         losses = []
         with torch.no_grad():
-            for i, (images, target, indexes) in enumerate(self.fixed_train_dataloader):
+            for i, (images, target, indexes) in enumerate(self.dataloader):
                 if torch.cuda.is_available():
                     images = images.to(self.device)
                     target = target.to(self.device)
@@ -114,26 +102,28 @@ class TAkS:
                 loss = criterion(output, target)
                 losses.append(loss)
 
-        self.train_dataset.apply_transform = True
-
         losses = torch.cat(losses, dim=0)
         return losses
 
     def pre_epoch_hook(self, model):
         loss = self._calc_loss(model)
         
-        indices = []
+        selected_indicies = []
+        unselected_indicies = []
         cum_losses = np.empty(len(loss))
         objectives = np.empty(len(loss))
         for i, player in enumerate(self.players):
             class_idx = self.class_indices[i]
             cum_loss, objective = player.update(loss[class_idx])
             selected_idx = torch.where(player.w)[0].cpu()
-            indices.append(class_idx[selected_idx])
+            selected_indicies.append(class_idx[selected_idx])
+            unselected_idx = torch.where(~player.w)[0].cpu()
+            unselected_indicies.append(class_idx[unselected_idx])
             cum_losses[class_idx] = cum_loss.cpu()
             objectives[class_idx] = objective.cpu()
-        indices = np.concatenate(indices)
-        return loss, cum_loss, objective, indices
+        selected_indicies = np.concatenate(selected_indicies)
+        unselected_indicies = np.concatenate(unselected_indicies)
+        return loss, cum_loss, objective, selected_indicies, unselected_indicies
 
     def loss(self, outputs, target, *args, **kwargs):
         output = outputs[0]

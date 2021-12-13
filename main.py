@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
 from model import get_model
-from dataset import load_datasets, filter_loader
+from dataset import load_datasets, IndicesDataset
 from utils import (
     seed_all,
     save_metric,
@@ -154,7 +154,8 @@ def run(
 
         if hasattr(method, "pre_epoch_hook"):
             loss, cum_loss, objective, selected_ind = method.pre_epoch_hook(model)
-            selected_dataloader = filter_loader(train_dataloader, selected_ind)
+            selected_dataset = IndicesDataset(train_dataloader.dataset, selected_ind, transform=train_dataloader.dataset.transform)
+            selected_dataloader = DataLoader(selected_dataset, batch_size=train_dataloader.batch_size, shuffle=train_dataloader.shuffle, num_workers=train_dataloader.num_workers)
         else:
             loss = cum_loss = objective = None 
 
@@ -343,6 +344,10 @@ if __name__ == "__main__":
         )
     else:
         valid_dataloader = None
+    pure_train_dataset = IndicesDataset(train_dataset, np.arange(len(train_dataset)), transform=None)
+    pure_train_dataloader = DataLoader(
+        pure_train_dataset, batch_size=batch_size * 4, shuffle=False, num_workers=16
+    )
 
     if args.noise_type not in ["symmetric", "asymmetric"]:
         dataset_log_dir = args.dataset_name
@@ -390,7 +395,7 @@ if __name__ == "__main__":
         method = F_correction(
             pretrained_model,
             args.dataset_name,
-            train_dataloader,
+            pure_train_dataloader,
             device,
         )
     elif args.method_name == "decouple":
@@ -420,7 +425,7 @@ if __name__ == "__main__":
         from methods.tv import TV
 
         method = TV(
-            train_dataloader,
+            pure_train_dataloader,
             epochs,
             device,
             args.dataset_name,
@@ -435,7 +440,7 @@ if __name__ == "__main__":
             pretrained_model,
             loss_type,
             args.dataset_name,
-            train_dataloader,
+            pure_train_dataloader,
             device,
         )
     elif args.method_name == "taks":
@@ -444,7 +449,7 @@ if __name__ == "__main__":
         method = TAkS(
             pretrained_model,
             criterion,
-            train_dataset,
+            pure_train_dataloader,
             args.dataset_name,
             batch_size,
             epochs,
