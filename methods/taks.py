@@ -5,13 +5,11 @@ import numpy as np
 
 class TAkS:
     def __init__(
-        self, classifier, criterion, dataloader, dataset_name, batch_size, epochs, k_ratio, lr_ratio, device, use_auto_k=False, use_multi_k=False, use_total=True, use_noise=True,
+        self, classifier, dataloader, criterion, epochs, k_ratio, lr_ratio, device, use_auto_k=False, use_multi_k=False, use_total=True, use_noise=True,
     ):
         self.classifier = classifier
-        self.criterion = criterion
         self.dataloader = dataloader
-        self.dataset_name = dataset_name
-        self.batch_size = batch_size
+        self.criterion = criterion
         self.epochs = epochs
         self.k_ratio = k_ratio
         self.lr_ratio = lr_ratio
@@ -33,10 +31,12 @@ class TAkS:
         self.num_models = 1
         self._config()
 
-    def _predict_k(self):
-        self.classifier.eval()
+    def _predict(self, model, criterion=None):
+        # switch to evaluate mode
+        model.eval()
 
         c = len(self.dataloader.dataset.classes)
+        losses = []
         corrects = np.zeros((c))
         total = np.zeros((c))
         with torch.no_grad():
@@ -46,20 +46,31 @@ class TAkS:
                     target = target.to(self.device)
 
                 # compute output
-                output = self.classifier(images)
-                pred = output.argmax(dim=1).T
-                correct = (pred == target)
+                output = model(images)
 
-                for i in range(c):
-                    mask_class = (target == i)
-                    corrects[i] += (correct * mask_class).sum()
-                    total[i] += mask_class.sum()
+                # compute loss
+                if criterion is not None:
+                    loss = criterion(output, target)
+                    losses.append(loss)
+                # compute correct ratio
+                else:
+                    pred = output.argmax(dim=1).T
+                    correct = (pred == target)
 
-        return corrects / total
+                    for i in range(c):
+                        mask_class = (target == i)
+                        corrects[i] += (correct * mask_class).sum()
+                        total[i] += mask_class.sum()
+
+        if criterion is not None:
+            losses = torch.cat(losses, dim=0)
+            return losses
+        else:
+            return corrects / total
 
     def _config(self):
         if self.use_auto_k:
-            k_ratios = self._predict_k() + self.k_ratio
+            k_ratios = self._predict(self.classifier) + self.k_ratio
             k_ratios = np.minimum(np.maximum(k_ratios, 0), 1)
             self.use_multi_k = True
         elif self.use_multi_k:
@@ -82,31 +93,8 @@ class TAkS:
             self.class_indices.append(idx)
             self.players.append(player)
 
-    def _calc_loss(self, model):
-        criterion = nn.CrossEntropyLoss(reduction="none")
-
-        # switch to evaluate mode
-        model.eval()
-
-        losses = []
-        with torch.no_grad():
-            for i, (images, target, indexes) in enumerate(self.dataloader):
-                if torch.cuda.is_available():
-                    images = images.to(self.device)
-                    target = target.to(self.device)
-
-                # compute output
-                output = model(images)
-
-                # compute loss
-                loss = criterion(output, target)
-                losses.append(loss)
-
-        losses = torch.cat(losses, dim=0)
-        return losses
-
     def pre_epoch_hook(self, model):
-        loss = self._calc_loss(model)
+        loss = self._predict(model, self.criterion)
         
         selected_indicies = []
         unselected_indicies = []

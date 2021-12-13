@@ -139,6 +139,7 @@ def run(
     schedulers,
     criterion,
     epochs,
+    method_warmup,
     device,
     writers,
     train_noise_ind,
@@ -152,12 +153,13 @@ def run(
     for epoch in range(1, epochs + 1):
         start_time = time.time()
 
-        if hasattr(method, "pre_epoch_hook"):
+        if epoch > method_warmup and hasattr(method, "pre_epoch_hook"):
             loss, cum_loss, objective, selected_ind = method.pre_epoch_hook(model)
             selected_dataset = IndicesDataset(train_dataloader.dataset, selected_ind, transform=train_dataloader.dataset.transform)
             selected_dataloader = DataLoader(selected_dataset, batch_size=train_dataloader.batch_size, shuffle=train_dataloader.shuffle, num_workers=train_dataloader.num_workers)
         else:
-            loss = cum_loss = objective = None 
+            loss = cum_loss = objective = selected_ind = None 
+            selected_dataloader = train_dataloader
 
         train_loss_avgs, train_top1_avgs, train_top5_avgs, selected_indices = train(
             method,
@@ -169,9 +171,6 @@ def run(
         )
 
         epoch_time = time.time() - start_time
-
-        if hasattr(method, "pre_epoch_hook"):
-            selected_indices = [selected_ind]
 
         if schedulers is not None:
             for scheduler in schedulers:
@@ -234,6 +233,9 @@ def run(
                 )
                 np.save(objective_path, objective)
 
+            if selected_ind is not None:
+                selected_indices = [selected_ind]
+
             if len(selected_indices[i]) > 0:
                 clean_selected_ind = np.setdiff1d(selected_indices[i], train_noise_ind)
                 label_precision = len(clean_selected_ind) / len(selected_indices[i])
@@ -295,6 +297,7 @@ if __name__ == "__main__":
     #region dataset-specific setting
     if args.dataset_name == "mnist":
         epochs = 30
+        method_warmup = 5
         batch_size = 128
         model_name = "lenet"
         step_size = 5
@@ -302,6 +305,7 @@ if __name__ == "__main__":
         weight_decay = 1e-4
     elif args.dataset_name in ["cifar10", "deepmind-cifar10"]:
         epochs = 200
+        method_warmup = 10
         batch_size = 512
         model_name = "resnet26"
         step_size = 40
@@ -309,6 +313,7 @@ if __name__ == "__main__":
         weight_decay = 1e-5
     elif args.dataset_name in ["cifar100", "deepmind-cifar100", "tiny-imagenet"]:
         epochs = 120
+        method_warmup = 30
         batch_size = 512
         model_name = "preactresnet56"
         step_size = 40
@@ -316,6 +321,7 @@ if __name__ == "__main__":
         weight_decay = 1e-5
     elif args.dataset_name == "clothing1m":
         epochs = 10
+        method_warmup = 5
         batch_size = 32
         model_name = "resnet50"
         step_size = 5
@@ -448,11 +454,9 @@ if __name__ == "__main__":
 
         method = TAkS(
             pretrained_model,
-            criterion,
             pure_train_dataloader,
-            args.dataset_name,
-            batch_size,
-            epochs,
+            criterion,
+            epochs - method_warmup,
             args.k_ratio,
             args.lr_ratio,
             device,
@@ -555,6 +559,7 @@ if __name__ == "__main__":
         schedulers,
         criterion,
         epochs,
+        method_warmup,
         device,
         writers,
         train_noise_ind,
