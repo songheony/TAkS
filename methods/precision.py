@@ -100,7 +100,7 @@ class Precision:
             cum_losses[class_idx] = cum_loss.cpu()
             objectives[class_idx] = objective.cpu()
         indices = np.concatenate(indices)
-        return loss, cum_loss, objective, [indices]
+        return loss, cum_loss, objective, indices
 
     def loss(self, outputs, target, *args, **kwargs):
         output = outputs[0]

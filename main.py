@@ -31,7 +31,7 @@ def train(
     loss_meters = []
     top1_meters = []
     top5_meters = []
-    inds_updates = [[] for _ in range(len(models))]
+    selected_indices = [[] for _ in range(len(models))]
 
     show_logs = []
     for i in range(len(models)):
@@ -62,7 +62,7 @@ def train(
         
         # calculate loss and selected index
         ind = indexes.cpu().numpy().transpose()
-        losses, ind_updates = method.loss(outputs, target, epoch=epoch, ind=ind)
+        losses, selected_ind = method.loss(outputs, target, epoch=epoch, ind=ind)
 
         if None in losses or any(~torch.isfinite(torch.tensor(losses))):
             continue
@@ -81,9 +81,9 @@ def train(
 
             top1_meters[m].update(acc1[0].item(), images.size(0))
             top5_meters[m].update(acc5[0].item(), images.size(0))
-            if len(ind_updates[m]) > 0:
-                loss_meters[m].update(losses[m].item(), len(ind_updates[m]))
-                inds_updates[m] += indexes[ind_updates[m]].numpy().tolist()
+            if len(selected_ind[m]) > 0:
+                loss_meters[m].update(losses[m].item(), len(selected_ind[m]))
+                selected_indices[m] += indexes[selected_ind[m]].numpy().tolist()
             else:
                 loss_meters[m].update(losses[m].item(), images.size(0))
 
@@ -94,7 +94,7 @@ def train(
     top1_avgs = [top1_meter.avg for top1_meter in top1_meters]
     top5_avgs = [top5_meter.avg for top5_meter in top1_meters]
 
-    return loss_avgs, top1_avgs, top5_avgs, inds_updates
+    return loss_avgs, top1_avgs, top5_avgs, selected_indices
 
 
 def validate(val_loader, model, criterion, device, is_test):
@@ -153,12 +153,12 @@ def run(
         start_time = time.time()
 
         if hasattr(method, "pre_epoch_hook"):
-            loss, cum_loss, objective, pre_inds_updates = method.pre_epoch_hook(model)
-            selected_dataloader = filter_loader(train_dataloader, pre_inds_updates[0])
+            loss, cum_loss, objective, selected_ind = method.pre_epoch_hook(model)
+            selected_dataloader = filter_loader(train_dataloader, selected_ind)
         else:
             selected_dataloader = train_dataloader
 
-        train_loss_avgs, train_top1_avgs, train_top5_avgs, inds_updates = train(
+        train_loss_avgs, train_top1_avgs, train_top5_avgs, selected_indices = train(
             method,
             selected_dataloader,
             models,
@@ -170,7 +170,7 @@ def run(
         epoch_time = time.time() - start_time
 
         if hasattr(method, "pre_epoch_hook"):
-            inds_updates = pre_inds_updates
+            selected_indices = [selected_ind]
 
         if schedulers is not None:
             for scheduler in schedulers:
@@ -231,16 +231,16 @@ def run(
                 )
                 np.save(objective_path, objective)
 
-            if len(inds_updates[i]) > 0:
-                clean_selected_ind = np.setdiff1d(inds_updates[i], train_noise_ind)
-                label_precision = len(clean_selected_ind) / len(inds_updates[i])
+            if len(selected_indices[i]) > 0:
+                clean_selected_ind = np.setdiff1d(selected_indices[i], train_noise_ind)
+                label_precision = len(clean_selected_ind) / len(selected_indices[i])
                 label_recall = len(clean_selected_ind) / (
                     len(train_dataloader.dataset) - len(train_noise_ind)
                 )
 
                 writers[i].add_scalar("Select/Label Precision", label_precision, epoch)
                 writers[i].add_scalar("Select/Label Recall", label_recall, epoch)
-                selected_idxs[i].append(inds_updates[i])
+                selected_idxs[i].append(selected_indices[i])
 
             if best_valid_top1s[i] <= valid_top1:
                 best_valid_top1s[i] = valid_top1
