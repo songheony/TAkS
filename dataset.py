@@ -11,11 +11,12 @@ from datasets.cifar100 import sparse2coarse
 
 
 class Subset(Dataset):
-    def __init__(self, dataset, indices, dataset_name, transform=None):
+    def __init__(self, dataset, indices, dataset_name, transform=None, apply_transform=True):
         self.dataset = dataset
         self.indices = indices
         self.dataset_name = dataset_name
         self.transform = transform
+        self.apply_transform = apply_transform
 
         if self.dataset_name == "deepmind-cifar100":
             self.coarses = np.array(self.dataset.coarses)[self.indices]
@@ -30,7 +31,7 @@ class Subset(Dataset):
 
     def __getitem__(self, idx):
         x, y = self.dataset[self.indices[idx]]
-        if self.transform:
+        if self.transform and self.apply_transform:
             x = self.transform(x)
         return x, y, idx
 

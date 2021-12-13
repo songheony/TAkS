@@ -36,6 +36,7 @@ class TAkS:
 
     def _predict_k(self):
         self.classifier.eval()
+        self.train_dataset.apply_transform = False
 
         c = len(self.fixed_train_dataloader.dataset.classes)
         corrects = np.zeros((c))
@@ -55,6 +56,8 @@ class TAkS:
                     mask_class = (target == i)
                     corrects[i] += (correct * mask_class).sum()
                     total[i] += mask_class.sum()
+
+        self.train_dataset.apply_transform = True
 
         return corrects / total
 
@@ -93,6 +96,7 @@ class TAkS:
     def _calc_loss(self, model):
         # switch to evaluate mode
         model.eval()
+        self.train_dataset.apply_transform = False
 
         criterion = nn.CrossEntropyLoss(reduction="none")
 
@@ -109,6 +113,8 @@ class TAkS:
                 # compute loss
                 loss = criterion(output, target)
                 losses.append(loss)
+
+        self.train_dataset.apply_transform = True
 
         losses = torch.cat(losses, dim=0)
         return losses
