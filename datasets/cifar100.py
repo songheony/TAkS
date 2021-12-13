@@ -43,4 +43,6 @@ def get_cifar100(root):
     test_dataset = datasets.CIFAR100(root=root, download=True, train=False)
     train_dataset.coarse_classes = list(range(20))
     test_dataset.coarse_classes = list(range(20))
+    train_dataset.coarses = sparse2coarse(train_dataset.targets)
+    test_dataset.coarses = sparse2coarse(test_dataset.targets)
     return train_dataset, None, test_dataset, train_transform, test_transform

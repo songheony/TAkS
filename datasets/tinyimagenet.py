@@ -49,6 +49,8 @@ class TinyImageNet(Dataset):
                     )
                     self.targets.append(self.cls2idx[label_text])
 
+        self.courses = self.targets
+
     def __len__(self):
         return len(self.image_paths)
 

@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader, Dataset
 
 from utils import seed_all
 from noises import noisify
-from datasets.cifar100 import sparse2coarse
 
 
 class Subset(Dataset):
@@ -18,15 +17,9 @@ class Subset(Dataset):
         self.transform = transform
         self.apply_transform = apply_transform
 
-        if self.dataset_name == "deepmind-cifar100":
-            self.coarses = np.array(self.dataset.coarses)[self.indices]
-        else:
-            self.coarses = np.array(self.dataset.targets)[self.indices]
-            if self.dataset_name == "cifar100":
-                self.coarses = sparse2coarse(self.coarses)
-
         self.classes = self.dataset.classes
         self.coarse_classes = self.dataset.coarse_classes
+        self.coarses = np.array(self.dataset.coarses)[self.indices]
         self.targets = np.array(self.dataset.targets)[self.indices]
 
     def __getitem__(self, idx):
