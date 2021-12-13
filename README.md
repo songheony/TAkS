@@ -17,9 +17,11 @@ We've implemented baselines and the proposed method in this repository.
 
 ## Requirements
 
-We strongly recommend using a conda environment.
+We strongly recommend using Anaconda or Docker.
 
-### For training and test
+### Anaconda
+
+#### For training and test
 
 Our training and testing code depends solely on PyTorch (>= 0.4.1).  
 Additionally, a tensorboard is used to visualize the loss during learning.  
@@ -38,7 +40,7 @@ or after entering to the conda environment through the following command in a ne
 conda activate TAkS
 ```
 
-### For visualization
+#### For visualization
 
 Note that cuml is only used for visualization_minor.py and it requires Python version 3.7.
 
@@ -47,6 +49,16 @@ conda install pandas
 conda install -c plotly plotly plotly-orca
 conda install -c rapidsai cuml
 ```
+
+### Docker
+
+We provide pre-built docker image and you can easily pull and use that image.
+
+```sh
+docker pull songheony/aaa
+```
+
+If you want to build custom image, you can make it based on `docker/Dockerfile`.
 
 ## How to run
 
