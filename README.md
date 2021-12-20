@@ -13,6 +13,9 @@ We've implemented baselines and the proposed method in this repository.
 * [Co-teaching](https://arxiv.org/abs/1804.06872)[<https://github.com/bhanML/Co-teaching>]
 * [Co-teaching+](https://arxiv.org/abs/1901.04215)[<https://github.com/bhanML/coteaching_plus>]
 * [JoCoR](https://arxiv.org/abs/2003.02752)[<https://github.com/hongxin001/JoCoR>]
+* [Class2Simi](https://arxiv.org/abs/2006.07831)[<https://github.com/scifancier/Class2Simi>]
+* [TV](https://arxiv.org/abs/2102.02414)[<https://github.com/YivanZhang/lio/tree/master/ex/transition-matrix>]
+* [CDR](https://openreview.net/forum?id=Eql5b1_hTE4)[<https://github.com/xiaoboxia/CDR>]
 * [TAkS](https://arxiv.org/abs/2003.03179) (Ours)
 
 ## Requirements
@@ -69,7 +72,7 @@ python main.py --method_name [METHOD_NAME] --dataset_name [DATASET_NAME] --noise
 ```
 
 METHOD_NAME must be one of the following values:  
-f-correction, decouple, co-teaching. co-teaching+, jocor, and ours.
+f-correction, decouple, co-teaching. co-teaching+, jocor, class2simi, tv, cdr, and ours.
 
 DATASET_NAME must be one of the following values:  
 mnist, cifar10, cifar100, and clothing1m.
