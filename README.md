@@ -55,7 +55,7 @@ conda install -c rapidsai cuml
 We provide pre-built docker image and you can easily pull and use that image.
 
 ```sh
-docker pull songheony/aaa
+docker pull songheony/taks
 ```
 
 If you want to build custom image, you can make it based on `docker/Dockerfile`.
