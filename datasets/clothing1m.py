@@ -97,7 +97,7 @@ def get_clothing1m(root):
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ]
     )
-    train_dataset = Clothing1M(root=root, mode="train")
-    test_dataset = Clothing1M(root=root, mode="test")
-    valid_dataset = Clothing1M(root=root, mode="valid")
+    train_dataset = Clothing1M(root=root, mode="train", transform=train_transform)
+    test_dataset = Clothing1M(root=root, mode="test", transform=test_transform)
+    valid_dataset = Clothing1M(root=root, mode="valid", transform=test_transform)
     return train_dataset, valid_dataset, test_dataset, train_transform, test_transform

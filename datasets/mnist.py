@@ -15,8 +15,8 @@ def get_mnist(root):
             transforms.Normalize((0.1307,), (0.3081,)),
         ]
     )
-    train_dataset = datasets.MNIST(root=root, download=True, train=True)
-    test_dataset = datasets.MNIST(root=root, download=True, train=False)
+    train_dataset = datasets.MNIST(root=root, download=True, train=True, transform=train_transform)
+    test_dataset = datasets.MNIST(root=root, download=True, train=False, transform=test_transform)
     train_dataset.coarse_classes = list(range(10))
     test_dataset.coarse_classes = list(range(10))
     train_dataset.courses = train_dataset.targets

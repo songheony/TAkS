@@ -83,8 +83,8 @@ def get_tinyimagenet(root):
             transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
         ]
     )
-    train_dataset = TinyImageNet(root=root, mode="train")
-    test_dataset = TinyImageNet(root=root, mode="test")
+    train_dataset = TinyImageNet(root=root, mode="train", transform=train_transform)
+    test_dataset = TinyImageNet(root=root, mode="test", transform=test_transform)
     train_dataset.coarse_classes = list(range(200))
     test_dataset.coarse_classes = list(range(200))
     return train_dataset, None, test_dataset, train_transform, test_transform
