@@ -31,7 +31,7 @@ class TAkS:
         self.num_models = 1
         self._config()
 
-    def _predict(self, model, criterion=None):
+    def _predict(self, model, compute_loss=False):
         # switch to evaluate mode
         model.eval()
 
@@ -49,8 +49,8 @@ class TAkS:
                 output = model(images)
 
                 # compute loss
-                if criterion is not None:
-                    loss = criterion(output, target)
+                if compute_loss:
+                    loss = self.criterion_for_select(output, target)
                     losses.append(loss)
                 # compute correct ratio
                 else:
@@ -62,15 +62,17 @@ class TAkS:
                         corrects[i] += (correct * mask_class).sum()
                         total[i] += mask_class.sum()
 
-        if criterion is not None:
+        if compute_loss:
             losses = torch.cat(losses, dim=0)
             return losses
         else:
             return corrects / total
 
     def _config(self):
+        self.criterion_for_select = nn.CrossEntropyLoss(reduction="none")
+
         if self.use_auto_k:
-            k_ratios = self._predict(self.classifier) + self.k_ratio
+            k_ratios = self._predict(self.classifier, compute_loss=False) + self.k_ratio
             k_ratios = np.minimum(np.maximum(k_ratios, 0), 1)
             self.use_multi_k = True
         elif self.use_multi_k:
@@ -94,7 +96,7 @@ class TAkS:
             self.players.append(player)
 
     def pre_epoch_hook(self, model):
-        loss = self._predict(model, self.criterion)
+        loss = self._predict(model, compute_loss=True)
         
         selected_indicies = []
         unselected_indicies = []
@@ -111,7 +113,7 @@ class TAkS:
             objectives[class_idx] = objective.cpu()
         selected_indicies = np.concatenate(selected_indicies)
         unselected_indicies = np.concatenate(unselected_indicies)
-        return loss, cum_loss, objective, selected_indicies, unselected_indicies
+        return loss.cpu(), cum_losses, objectives, selected_indicies, unselected_indicies
 
     def loss(self, outputs, target, *args, **kwargs):
         output = outputs[0]

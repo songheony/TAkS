@@ -154,9 +154,9 @@ def run(
         start_time = time.time()
 
         if epoch > method_warmup and hasattr(method, "pre_epoch_hook"):
-            loss, cum_loss, objective, selected_ind = method.pre_epoch_hook(model)
+            loss, cum_loss, objective, selected_ind, unselected_ind = method.pre_epoch_hook(model)
             selected_dataset = IndicesDataset(train_dataloader.dataset, selected_ind, transform=train_dataloader.dataset.transform)
-            selected_dataloader = DataLoader(selected_dataset, batch_size=train_dataloader.batch_size, shuffle=train_dataloader.shuffle, num_workers=train_dataloader.num_workers)
+            selected_dataloader = DataLoader(selected_dataset, batch_size=train_dataloader.batch_size, shuffle=True, num_workers=train_dataloader.num_workers)
         else:
             loss = cum_loss = objective = selected_ind = None 
             selected_dataloader = train_dataloader
@@ -305,7 +305,7 @@ if __name__ == "__main__":
         weight_decay = 1e-4
     elif args.dataset_name in ["cifar10", "deepmind-cifar10"]:
         epochs = 200
-        method_warmup = 10
+        method_warmup = 40
         batch_size = 512
         model_name = "resnet26"
         step_size = 40
@@ -313,7 +313,7 @@ if __name__ == "__main__":
         weight_decay = 1e-5
     elif args.dataset_name in ["cifar100", "deepmind-cifar100", "tiny-imagenet"]:
         epochs = 120
-        method_warmup = 30
+        method_warmup = 40
         batch_size = 512
         model_name = "preactresnet56"
         step_size = 40
@@ -350,7 +350,7 @@ if __name__ == "__main__":
         )
     else:
         valid_dataloader = None
-    pure_train_dataset = IndicesDataset(train_dataset, np.arange(len(train_dataset)), transform=None)
+    pure_train_dataset = IndicesDataset(train_dataset, np.arange(len(train_dataset)), transform=test_dataset.transform)
     pure_train_dataloader = DataLoader(
         pure_train_dataset, batch_size=batch_size * 4, shuffle=False, num_workers=16
     )
