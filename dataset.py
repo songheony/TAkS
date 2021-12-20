@@ -11,17 +11,24 @@ from noises import noisify
 class IndicesDataset(Dataset):
     def __init__(self, dataset, indices, transform=None):
         self.dataset = dataset
+        self.indices = np.array(indices)
         self.transform = transform
+
         self.classes = dataset.classes
         self.targets = np.array(self.dataset.targets)[indices]
 
-        if isinstance(self.dataset, IndicesDataset):
-            self.indices = self.dataset.indices[indices]
-        else:
-            self.indices = np.array(indices)
-
     def __getitem__(self, idx):
-        x, y = self.dataset[self.indices[idx]]
+        # remove transform from original dataset
+        transform = self.dataset.transform
+        self.dataset.transform = None
+
+        # get original data
+        data = self.dataset[self.indices[idx]]
+        x, y = data[:2]
+
+        # restore transform
+        self.dataset.transform = transform
+
         if self.transform:
             x = self.transform(x)
         return x, y, idx
@@ -199,8 +206,11 @@ def load_datasets(
         train_dataset, valid_dataset, noise_ind = divide_train(
             train_ratio, train_dataset, noise_ind, train_subset_path, valid_subset_path, train_transform, test_transform
         )
-    else:
-        train_dataset = IndicesDataset(train_dataset, np.arange(len(train_dataset)), train_transform)
+
+    train_dataset = IndicesDataset(train_dataset, np.arange(len(train_dataset)), train_transform)
+    if valid_dataset is not None:
+        valid_dataset = IndicesDataset(valid_dataset, np.arange(len(valid_dataset)), test_transform)
+    test_dataset = IndicesDataset(test_dataset, np.arange(len(test_dataset)), test_transform)
 
     return (
         train_dataset,
