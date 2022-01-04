@@ -16,6 +16,7 @@ from utils import (
     save_metric,
     save_best_metric,
     save_pickle,
+    semi_loss,
 )
 from meter import AverageMeter, ProgressMeter, accuracy
 
@@ -86,6 +87,140 @@ def train(
                 selected_indices[m] += indexes[selected_ind[m]].numpy().tolist()
             else:
                 loss_meters[m].update(losses[m].item(), images.size(0))
+
+        if i % 100 == 0:
+            progress.display(i)
+
+    loss_avgs = [loss_meter.avg for loss_meter in loss_meters]
+    top1_avgs = [top1_meter.avg for top1_meter in top1_meters]
+    top5_avgs = [top5_meter.avg for top5_meter in top1_meters]
+
+    return loss_avgs, top1_avgs, top5_avgs, selected_indices
+
+
+def train_mixup(
+    method,
+    train_loader,
+    unlabeled_train_loader,
+    models,
+    optimizers,
+    epoch,
+    device,
+    T,
+    alpha,
+    target_model_index,
+    add_penalty,
+    refine_label,
+):
+    loss_meters = []
+    top1_meters = []
+    top5_meters = []
+    selected_indices = [[] for _ in range(len(models))]
+
+    show_logs = []
+    for i in range(len(models)):
+        loss_meter = AverageMeter(f"Loss{i}", ":.4e")
+        top1_meter = AverageMeter(f"Acc{i}@1", ":6.2f")
+        top5_meter = AverageMeter(f"Acc{i}@5", ":6.2f")
+        loss_meters.append(loss_meter)
+        top1_meters.append(top1_meter)
+        top5_meters.append(top5_meter)
+        show_logs += [loss_meter, top1_meter, top5_meter]
+    progress = ProgressMeter(
+        len(train_loader), show_logs, prefix="Epoch: [{}]".format(epoch)
+    )
+
+    # switch to train mode
+    for i in range(len(models)):
+        models[i].eval()
+    models[target_model_index].train()
+
+    batch_size = train_loader.batch_size
+    num_classes = len(train_loader.dataset.classes)
+    num_iter = (len(train_loader.dataset) // batch_size)+1
+    unlabeled_train_iter = iter(unlabeled_train_loader)
+    for i, (images, target, indexes) in enumerate(train_loader):
+        labeled_images_1, labeled_images_2 = images
+        try:
+            (unlabeled_images_1, unlabeled_images_2), _, _ = unlabeled_train_iter.next()
+        except:
+            unlabeled_train_iter = iter(unlabeled_train_loader)
+            unlabeled_images_1, unlabeled_images_2 = unlabeled_train_iter.next()
+
+        labeled_target = torch.zeros(batch_size, num_classes).scatter_(1, target.view(-1, 1).long(), 1)
+
+        if torch.cuda.is_available():
+            labeled_images_1 = images.to(device)
+            labeled_images_2 = images.to(device)
+            labeled_target = labeled_target.to(device)
+            unlabeled_images_1 = unlabeled_images_1.to(device)
+            unlabeled_images_2 = unlabeled_images_2.to(device)
+
+        with torch.no_grad():
+            labeled_outputs = []
+            unlabeled_outputs = []
+            for m in range(len(models)):
+                labeled_output_1 = models[m](labeled_images_1)
+                labeled_output_2 = models[m](labeled_images_2)
+                labeled_outputs += [labeled_output_1, labeled_output_2]
+
+                unlabeled_output_1 = models[m](unlabeled_images_1)
+                unlabeled_output_2 = models[m](unlabeled_images_2)
+                unlabeled_outputs += [unlabeled_output_1, unlabeled_output_2]
+
+            if refine_label:
+                px = np.mean([torch.softmax(labeled_output, dim=1) for labeled_output in labeled_outputs])
+                px = w_x * target + (1 - w_x) * px
+                ptx = px ** (1 / T)
+                labeled_target = ptx / ptx.sum(dim=1, keepdim=True)
+                labeled_target = labeled_target.detach()
+
+            pu = np.mean([torch.softmax(unlabeled_output, dim=1) for unlabeled_output in unlabeled_outputs])
+            ptu = pu ** (1 / T)
+            unlabeled_target = ptu / ptu.sum(dim=1, keepdim=True)
+            unlabeled_target = unlabeled_target.detach()
+
+        l = np.random.beta(alpha, alpha)        
+        l = max(l, 1 - l)
+
+        all_inputs = torch.cat([labeled_images_1, labeled_images_2, unlabeled_images_1, unlabeled_images_2], dim=0)
+        all_targets = torch.cat([labeled_target, labeled_target, unlabeled_target, unlabeled_target], dim=0)
+
+        idx = torch.randperm(all_inputs.size(0))
+
+        input_a, input_b = all_inputs, all_inputs[idx]
+        target_a, target_b = all_targets, all_targets[idx]
+
+        mixed_input = l * input_a + (1 - l) * input_b        
+        mixed_target = l * target_a + (1 - l) * target_b
+
+        logits = models[target_model_index](mixed_input)
+        logits_x = logits[:batch_size*2]
+        logits_u = logits[batch_size*2:]
+
+        Lx, Lu, lamb = semi_loss(logits_x, mixed_target[:batch_size * 2], logits_u, mixed_target[batch_size * 2:], epoch + i/num_iter, warm_up)
+        loss = Lx + lamb * Lu
+
+        if add_penalty:
+            prior = torch.ones(num_classes) / num_classes
+            prior = prior.cuda()        
+            pred_mean = torch.softmax(logits, dim=1).mean(0)
+            penalty = torch.sum(prior*torch.log(prior / pred_mean))
+            loss += penalty
+
+        if None in loss or any(~torch.isfinite(loss)):
+            continue
+
+        # compute gradient and do BP
+        optimizers[target_model_index].zero_grad()
+        loss.backward()
+        if hasattr(method, "post_backward_hook"):
+            method.post_backward_hook(models[target_model_index])
+        optimizers[target_model_index].step()
+
+        # measure accuracy and record loss
+        for m in range(len(models)):
+            loss_meters[m].update(loss.item(), batch_size)
 
         if i % 100 == 0:
             progress.display(i)
@@ -268,6 +403,7 @@ if __name__ == "__main__":
     parser.add_argument("--noise_type", type=str, default="symmetric")
     parser.add_argument("--noise_ratio", type=float, default=0.8)
     parser.add_argument('--use_pretrained', action='store_true')
+    parser.add_argument('--use_warmup', action='store_true')
 
     parser.add_argument("--method_name", type=str, default="ftl")
 
@@ -297,7 +433,6 @@ if __name__ == "__main__":
     #region dataset-specific setting
     if args.dataset_name == "mnist":
         epochs = 30
-        method_warmup = 5
         batch_size = 128
         model_name = "lenet"
         step_size = 5
@@ -305,7 +440,6 @@ if __name__ == "__main__":
         weight_decay = 1e-4
     elif args.dataset_name in ["cifar10", "deepmind-cifar10"]:
         epochs = 200
-        method_warmup = 40
         batch_size = 512
         model_name = "resnet26"
         step_size = 40
@@ -313,7 +447,6 @@ if __name__ == "__main__":
         weight_decay = 1e-5
     elif args.dataset_name in ["cifar100", "deepmind-cifar100", "tiny-imagenet"]:
         epochs = 120
-        method_warmup = 40
         batch_size = 512
         model_name = "preactresnet56"
         step_size = 40
@@ -321,12 +454,13 @@ if __name__ == "__main__":
         weight_decay = 1e-5
     elif args.dataset_name == "clothing1m":
         epochs = 10
-        method_warmup = 5
         batch_size = 32
         model_name = "resnet50"
         step_size = 5
         gamma = 0.1
         weight_decay = 1e-5
+
+    method_warmup = step_size if args.use_warmup else 0
     #endregion
 
     #region prepare dataset
@@ -524,10 +658,11 @@ if __name__ == "__main__":
     #endregion
 
     #region prepare logger
+    method_dir_name = method.name
+    if args.use_warmup:
+        method_dir_name = f"{method_dir_name}_warmup"
     if args.method_name != "standard":
-        method_dir_name = f"{method.name}_pretrained" if args.use_pretrained else f"{method.name}_scratch"
-    else:
-        method_dir_name = method.name
+        method_dir_name = f"{method_dir_name}_pretrained" if args.use_pretrained else f"{method_dir_name}_scratch"
     root_log_dir = os.path.join(
         args.log_dir, dataset_log_dir, model_name, method_dir_name, str(args.seed)
     )
