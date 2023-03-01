@@ -70,7 +70,7 @@ def train(
             outputs.append(output)
 
         # calculate loss and selected index
-        if method_name in ["ours", "ftl", "greedy", "precision"]:
+        if method_name in ["ours", "ftl", "greedy", "precision", "itlm"]:
             ind = indexes.cpu().numpy()
             losses, ind_updates = loss_general(outputs, target, criterion)
         elif method_name == "f-correction":
@@ -188,6 +188,13 @@ def run(
         if method_name in ["ours", "ftl", "greedy", "precision"]:
             indices = np.where(kwargs["player"].w == 1)[0]
             selected_dataloader = selected_loader(train_dataloader, indices)
+        elif method_name == "itlm":
+            outputs, preds, targets = predict(
+                kwargs["fixed_train_dataloader"], models[0], device, softmax=False
+            )
+            objective = kwargs["loss_fn"](outputs, targets).cpu().numpy()
+            indices = np.argpartition(objective, kwargs["k"])[:kwargs["k"]]
+            selected_dataloader = selected_loader(train_dataloader, indices)
         else:
             selected_dataloader = train_dataloader
 
@@ -208,6 +215,8 @@ def run(
             )
             loss, cum_loss, objective = kwargs["player"].update(outputs, preds, targets)
             inds_updates = [indices]
+        elif method_name == "itlm":
+            inds_updates = [indices] 
         epoch_time = time.time() - start_time
 
         for optimizer in optimizers:
@@ -366,6 +375,16 @@ def config_co_teaching_plus(dataset_name):
         init_epoch = 5
 
     return init_epoch
+
+
+def config_itlm(train_dataset, batch_size, forget_rate):
+    fixed_train_dataloader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=False, num_workers=8
+    )
+
+    k = int(len(train_dataset) * (1 - forget_rate))
+    loss_fn = nn.CrossEntropyLoss(reduce=False, reduction='none')
+    return k, loss_fn, fixed_train_dataloader
 
 
 if __name__ == "__main__":
@@ -623,6 +642,24 @@ if __name__ == "__main__":
         models = [model1, model2]
         optimizers = [optimizer]
         kwargs = {"rate_schedule": rate_schedule, "co_lambda": args.co_lambda}
+    elif args.method_name == "itlm":
+        algorithm_name = f"ITLM(K_ratio-{args.k_ratio*100}%)"
+        model = get_model(model_name, args.dataset_name).to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+        k, loss_fn, fixed_train_dataloader = config_itlm(
+            train_dataset,
+            batch_size,
+            args.forget_rate,
+        )
+
+        models = [model]
+        optimizers = [optimizer]
+        kwargs = {
+            "k": k,
+            "loss_fn": loss_fn,
+            "fixed_train_dataloader": fixed_train_dataloader,
+        }
 
     criterion = nn.CrossEntropyLoss()
 

@@ -13,6 +13,7 @@ We've implemented baselines and the proposed method in this repository.
 * [Co-teaching](https://arxiv.org/abs/1804.06872)[<https://github.com/bhanML/Co-teaching>]
 * [Co-teaching+](https://arxiv.org/abs/1901.04215)[<https://github.com/bhanML/coteaching_plus>]
 * [JoCoR](https://arxiv.org/abs/2003.02752)[<https://github.com/hongxin001/JoCoR>]
+* [ITLM](https://arxiv.org/abs/1810.11874)
 * [TAkS](https://arxiv.org/abs/2003.03179) (Ours)
 
 ## Requirements
@@ -69,7 +70,7 @@ python main.py --method_name [METHOD_NAME] --dataset_name [DATASET_NAME] --noise
 ```
 
 METHOD_NAME must be one of the following values:  
-f-correction, decouple, co-teaching. co-teaching+, jocor, and ours.
+f-correction, decouple, co-teaching. co-teaching+, jocor, itlm, and ours.
 
 DATASET_NAME must be one of the following values:  
 mnist, cifar10, cifar100, and clothing1m.
