@@ -21,3 +21,4 @@ python ./main.py --method_name "co-teaching" --forget_rate $forget_ratio --seed 
 python ./main.py --method_name "co-teaching+" --forget_rate $forget_ratio --seed $seed --gpu $gpu --dataset_name $dataset --noise_type $noise_type --noise_ratio $noise_ratio
 python ./main.py --method_name "jocor" --forget_rate $forget_ratio --co_lambda $co_lambda --seed $seed --gpu $gpu --dataset_name $dataset --noise_type $noise_type --noise_ratio $noise_ratio
 python ./main.py --method_name "ours" --k_ratio $k_ratio --lr_ratio $lr_ratio --seed $seed --gpu $gpu --dataset_name $dataset --noise_type $noise_type --noise_ratio $noise_ratio
+python ./main.py --method_name "itlm" --forget_rate $forget_ratio --seed $seed --gpu $gpu --dataset_name $dataset --noise_type $noise_type --noise_ratio $noise_ratio

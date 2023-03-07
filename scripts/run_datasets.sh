@@ -65,6 +65,7 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
         python ./main.py --method_name "co-teaching+" --forget_rate ${forget_ratios[$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
         python ./main.py --method_name "jocor" --forget_rate ${forget_ratios[$k]} --co_lambda ${co_lambdas[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
         python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        python ./main.py --method_name "itlm" --forget_rate ${forget_ratios[$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done
 
@@ -106,5 +107,6 @@ for (( j=0; j<${#datasets[@]}; j++ )); do
         python ./main.py --method_name "co-teaching+" --forget_rate ${forget_ratios[$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
         python ./main.py --method_name "jocor" --forget_rate ${forget_ratios[$k]} --co_lambda ${co_lambdas[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
         python ./main.py --method_name "ours" --k_ratio ${k_ratios[$j,$k]} --lr_ratio ${lr_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
+        python ./main.py --method_name "itlm" --forget_rate ${forget_ratios[$k]} --lr_ratio ${lr_ratios[$j,$k]} --seed $seed --gpu $gpu --dataset_name ${datasets[$j]} --noise_type $noise_type --noise_ratio ${noise_ratios[$k]}
     done
 done

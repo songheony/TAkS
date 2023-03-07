@@ -643,7 +643,7 @@ if __name__ == "__main__":
         optimizers = [optimizer]
         kwargs = {"rate_schedule": rate_schedule, "co_lambda": args.co_lambda}
     elif args.method_name == "itlm":
-        algorithm_name = f"ITLM(K_ratio-{args.k_ratio*100}%)"
+        algorithm_name = f"ITLM(Forget_ratio-{args.forget_rate*100}%)"
         model = get_model(model_name, args.dataset_name).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 

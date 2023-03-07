@@ -652,6 +652,7 @@ if __name__ == "__main__":
         default=[
             "Standard",
             "F-correction",
+            "ITLM",
             "Decouple",
             "Co-teaching",
             "Co-teaching+",
@@ -665,6 +666,7 @@ if __name__ == "__main__":
     vis_algorithms = {
         "Standard": "Standard",
         "F-correction": "F-correction",
+        "ITLM": "ITLM",
         "Decouple": "Decouple",
         "Co-teaching": "Co-teaching",
         "Co-teaching+": "Co-teaching+",
@@ -721,6 +723,7 @@ if __name__ == "__main__":
 
     # draw accuracy and precision
     pre_algorithms = [
+        "ITLM",
         "Decouple",
         "Co-teaching",
         "Co-teaching+",
